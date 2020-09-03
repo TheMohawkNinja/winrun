@@ -1,0 +1,24 @@
+winrun is a simple way to run commands on a Windows machine from Linux and recieve the output.
+
+DEPENDENCIES
+
+	Requires installation of winrun_svr on the Windows machine which must be running when you want to run a command (so best to have it run on startup/login).
+
+SYNTAX
+	winrun [command]
+
+	command: The command you want to run. make sure to wrap this in quotation marks if it contains spaces.
+
+INSTALLATION
+
+	compile with "g++ winrun.cpp -o winrun" and copy the executable to /usr/bin
+
+CONFIGURATION
+
+	You will need to create a text file called "config" located at "~/.config/winrun" and put the target IP in there.
+
+KNOWN ISSUES
+
+	Some "non-standard" characters (i.e. the vertical and horizontal lines in the "tree" command) don't output properly and can cause a crash.
+
+	Output that changes within a given line will likely not output in the Linux terminal.
