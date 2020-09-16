@@ -72,8 +72,8 @@ int main(int argc, char** argv)
 						//Test if it is a valid line number before outputting
 						stoi(line.substr(0,dashIndex));
 
-						std::cout<<"(Line "+line.substr(0,dashIndex)+"): "+line.substr((dashIndex+1),(line.length()-(line.substr(0,dashIndex+1).length())))<<std::endl;
-						//std::cout<<line.substr((dashIndex+1),(line.length()-(line.substr(0,dashIndex+1).length())))<<std::endl;
+						//std::cout<<"(Line "+line.substr(0,dashIndex)+"): "+line.substr((dashIndex+1),(line.length()-(line.substr(0,dashIndex+1).length())))<<std::endl;
+						std::cout<<line.substr((dashIndex+1),(line.length()-(line.substr(0,dashIndex+1).length())))<<std::endl;
 
 						readstream.close();
 						remove((path+std::to_string(pid)).c_str());
