@@ -1,60 +1,14 @@
 #include <iostream>
 #include <sys/types.h>
 #include <unistd.h>
-#include <sys/socket.h>
-#include <netdb.h>
-#include <arpa/inet.h>
 #include <string.h>
 #include <cstdlib>
+#include <stdlib.h>
 #include <stdio.h>
 #include <fcntl.h>
 #include <fstream>
+#include <time.h>
 
-int bytesReceived,sendRes,sock;
-int connectRes=INT16_MAX;
-const int bufsize=4096;
-char buf[bufsize];
-std::string user=getlogin();
-std::string ip="";
-std::string configpath="/home/"+user+"/.config/winrun/config";
-std::ifstream readstream;
-
-void sendData(std::string d, int s)
-{
-	std::string breakCode;
-
-	//Send command
-        sendRes=send(s,d.c_str(),d.size()+1,0);
-
-        if(sendRes==-1)
-        {
-              	std::cout<<"Could not send data to server!\r\n";
-                sleep(1000);
-        }
-
-	//Recieve break code
-	breakCode=std::string(buf,recv(s,buf,bufsize,0));
-
-	//Wait for response and exit program when break code is recieved.
-	while(true)
-	{
-       	        memset(buf,0,bufsize);
-	        bytesReceived=recv(s,buf,bufsize,0);
-
-		if(std::string(buf,bytesReceived).find(breakCode)!=std::string::npos)
-		{
-			break;
-		}
-		else
-		{
-	        	//Display response
-		        if(bytesReceived>0)
-		        {
-		                std::cout<<std::string(buf,bytesReceived);
-	        	}
-		}
-	}
-}
 bool fexists(const char *filename)
 {
 	std::ifstream ifile(filename);
@@ -62,49 +16,100 @@ bool fexists(const char *filename)
 }
 int main(int argc, char** argv)
 {
+	int lineNum,dashIndex;
+	std::string path="/dev/shm/winrund/";
+	std::string line;
+	std::string lastLine;
+	pid_t pid=getpid();
+	std::ifstream readstream;
+	std::ofstream writestream;
+
+	//If user just types in "winrun"
 	if(!argv[1])
 	{
 		std::cout<<"No command entered!"<<std::endl;
-		return -2;
-	}
-
-	if(!fexists(configpath.c_str()))
-	{
-		std::cout<<"Config file not found at \""+configpath+"\". Please create the file at this location and put the target IP in it."<<std::endl;
-		return -3;
+		return -1;
 	}
 	else
 	{
-		//Get IP address
-		readstream.open(configpath);
-		getline(readstream,ip);
-		readstream.close();
+		//Attempt to open "out" file and wait 1ms if it cannot be opened
+		while(!writestream.is_open())
+		{
+			try
+			{
+				writestream.open((path+"out").c_str());
+			}
+			catch(...)
+			{
+				usleep(1000);
+			}
+		}
 
-		//Create a hint structure for the server we're connecting with
-	        sock=socket(AF_INET,SOCK_STREAM,0);
-	        int port=55000;
-	        std::string ipAddress=ip;
-	        sockaddr_in hint;
-	        hint.sin_family=AF_INET;
-	        hint.sin_port=htons(port);
-	        inet_pton(AF_INET,ipAddress.c_str(),&hint.sin_addr);
+		writestream<<pid<<std::endl;
+		writestream<<argv[1]<<std::endl;
+		writestream.close();
 
-	        if(sock==-1)
-	        {
-	                std::cout<<"Unable to create socket!"<<std::endl;
-	        }
+		//Attempt to open response file and dump contents to stdout
+		while(!readstream.is_open())
+		{
+			while(!fexists((path+std::to_string(pid)).c_str()))
+			{
+				usleep(100);
+			}
+			while(fexists((path+std::to_string(pid)+".lock").c_str()))
+			{
+				usleep(100);
+			}
+			try
+			{
+				readstream.open((path+std::to_string(pid)).c_str());
+				std::getline(readstream,line);
+				if(line!=lastLine&&line!=(std::to_string(pid)+std::to_string(pid)+std::to_string(pid)+std::to_string(pid)+std::to_string(pid)))
+				{
+					dashIndex=line.find("-");
+					try
+					{
+						//Test if it is a valid line number before outputting
+						stoi(line.substr(0,dashIndex));
 
-	        //Connect to the server on the socket
-	        connectRes=connect(sock,(sockaddr*)&hint,sizeof(hint));
+						std::cout<<"(Line "+line.substr(0,dashIndex)+"): "+line.substr((dashIndex+1),(line.length()-(line.substr(0,dashIndex+1).length())))<<std::endl;
+						//std::cout<<line.substr((dashIndex+1),(line.length()-(line.substr(0,dashIndex+1).length())))<<std::endl;
 
-	        if(connectRes==-1)
-	        {
-	                std::cout<<"Could not connect to server!"<<std::endl;
-	                return -1;
-	        }
+						readstream.close();
+						remove((path+std::to_string(pid)).c_str());
 
-		sendData(("\""+std::string(argv[1])+"\"").c_str(),sock);
+						lineNum=stoi(line.substr(0,line.find("-")));
+
+						lastLine=line;
+					}
+					catch(...)
+					{
+						readstream.close();
+						remove((path+std::to_string(pid)).c_str());
+					}
+
+					continue;
+				}
+				else if(line==lastLine)
+				{
+					readstream.close();
+					remove((path+std::to_string(pid)).c_str());
+
+					continue;
+				}
+				else
+				{
+					remove((path+std::to_string(pid)).c_str());
+					return 0;
+				}
+			}
+			catch(...)
+			{
+				std::cout<<"Failed to open \""<<(path+std::to_string(pid)).c_str()<<"\", waiting one microsecond!"<<std::endl;
+				usleep(100);
+			}
+		}
+	
 	}
-
 	return 0;
 }
