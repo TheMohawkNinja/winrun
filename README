@@ -11,11 +11,13 @@ SYNTAX
 
 INSTALLATION
 
-	compile with "g++ winrun.cpp -o winrun" and copy the executable to /usr/bin
+	compile with "g++ winrun.cpp -o winrun" and "g++ winrund.cpp -o winrund" and copy the executable to /usr/bin
 
 CONFIGURATION
 
 	You will need to create a text file called "config" located at "~/.config/winrun" and put the target IP in there.
+
+	winrund, the daemon program for handling the network traffic, should be started on login. Connection and output logs are in journalctl.
 
 KNOWN ISSUES
 
