@@ -1,3 +1,5 @@
+//g++ winrun.cpp -o winrun -lstdc++fs -std=c++17
+
 #include <iostream>
 #include <sys/types.h>
 #include <unistd.h>
@@ -8,19 +10,29 @@
 #include <fcntl.h>
 #include <fstream>
 #include <time.h>
+#include <filesystem>
 
-bool fexists(const char *filename)
+std::string getOutputFile(std::string filepath, const char *filename)
 {
-	std::ifstream ifile(filename);
-	return (bool)ifile;
+	std::string entry8;
+	for (const auto & entry : std::filesystem::directory_iterator(filepath))
+	{
+		entry8=entry.path().u8string();
+		if(entry8.find(filename)!=std::string::npos)
+		{
+			return entry8;
+		}
+	}
+	return "";
 }
 int main(int argc, char** argv)
 {
 	int lineNum,dashIndex;
+	pid_t pid=getpid();
 	std::string path="/dev/shm/winrund/";
+	std::string outputpath=(path+"_"+std::to_string(pid)).c_str();
 	std::string line;
 	std::string lastLine;
-	pid_t pid=getpid();
 	std::ifstream readstream;
 	std::ofstream writestream;
 
@@ -52,17 +64,17 @@ int main(int argc, char** argv)
 		//Attempt to open response file and dump contents to stdout
 		while(!readstream.is_open())
 		{
-			while(!fexists((path+std::to_string(pid)).c_str()))
+			while(getOutputFile(path,std::to_string(pid).c_str())=="")
 			{
 				usleep(100);
 			}
-			while(fexists((path+std::to_string(pid)+".lock").c_str()))
+			while(getOutputFile(path,(std::to_string(pid)+".lock").c_str())!="")
 			{
 				usleep(100);
 			}
 			try
 			{
-				readstream.open((path+std::to_string(pid)).c_str());
+				readstream.open(outputpath);
 				std::getline(readstream,line);
 				if(line!=lastLine&&line!=(std::to_string(pid)+std::to_string(pid)+std::to_string(pid)+std::to_string(pid)+std::to_string(pid)))
 				{
@@ -76,7 +88,7 @@ int main(int argc, char** argv)
 						std::cout<<line.substr((dashIndex+1),(line.length()-(line.substr(0,dashIndex+1).length())))<<std::endl;
 
 						readstream.close();
-						remove((path+std::to_string(pid)).c_str());
+						remove(outputpath.c_str());
 
 						lineNum=stoi(line.substr(0,line.find("-")));
 
@@ -85,7 +97,7 @@ int main(int argc, char** argv)
 					catch(...)
 					{
 						readstream.close();
-						remove((path+std::to_string(pid)).c_str());
+						remove(outputpath.c_str());
 					}
 
 					continue;
@@ -93,19 +105,19 @@ int main(int argc, char** argv)
 				else if(line==lastLine)
 				{
 					readstream.close();
-					remove((path+std::to_string(pid)).c_str());
+					remove(outputpath.c_str());
 
 					continue;
 				}
 				else
 				{
-					remove((path+std::to_string(pid)).c_str());
+					remove(outputpath.c_str());
 					return 0;
 				}
 			}
 			catch(...)
 			{
-				std::cout<<"Failed to open \""<<(path+std::to_string(pid)).c_str()<<"\", waiting one microsecond!"<<std::endl;
+				std::cout<<"Failed to open \""<<outputpath<<"\", waiting one hundred microseconds!"<<std::endl;
 				usleep(100);
 			}
 		}
