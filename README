@@ -11,7 +11,7 @@ SYNTAX
 
 INSTALLATION
 
-	compile with "g++ winrun.cpp -o winrun" and "g++ winrund.cpp -o winrund" and copy the executable to /usr/bin
+	g++ compile lines are located at the first line of "winrun.cpp" and "winrund.cpp". Once compiled, copy the executables to /usr/bin
 
 CONFIGURATION
 
