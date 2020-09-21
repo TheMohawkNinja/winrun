@@ -285,7 +285,7 @@ int main(void)
 {
 	//Define variables
 	pid_t pid, sid;
-	int ctr, rv;
+	int ctr, rv, bytesReceived;
 	int id[UCHAR_MAX];
 	char dataBuffer[bufsize];
 	std::string user=getlogin();
@@ -293,6 +293,7 @@ int main(void)
 	std::string configpath="/home/"+user+"/.config/winrun/config";
 	std::string outpath=path+"out";
 	std::string idstr;
+	std::string recvStr;
 	std::string writeBuffer[UCHAR_MAX];
 	std::string command[UCHAR_MAX];
 	std::ifstream configReader;
@@ -301,7 +302,7 @@ int main(void)
 	fd_set readfds, masterfds;
 	timeval timeout;
 	timeout.tv_sec=0;
-	timeout.tv_usec=10000;
+	timeout.tv_usec=10*ms;
 
 
 	//Fork the current process
@@ -437,6 +438,7 @@ int main(void)
 						memset(dataBuffer,0,bufsize);
 
 						FD_ZERO(&masterfds);
+						FD_ZERO(&readfds);
 						FD_SET(childSocket[j],&masterfds);
 						memcpy(&readfds,&masterfds,sizeof(fd_set));
 						rv=select(childSocket[j]+1,&readfds,NULL,NULL,&timeout);
@@ -444,23 +446,29 @@ int main(void)
 						if(rv==SO_ERROR)
 						{
 							syslog(LOG_ERR,("Socket error during select() for ready test on port "+std::to_string(55000+j)).c_str());
-							continue;
-
 						}
 						else if(rv==0)
 						{
-							syslog(LOG_ERR,("Timeout ("+std::to_string(timeout.tv_sec)+" sec, "+std::to_string(timeout.tv_usec)+" usec) while waiting for ready signal on port "+std::to_string(55000+j)+". PORT POSSIBLY HUNG RUNNING A COMMAND!!!").c_str());
-							continue;
+							syslog(LOG_ERR,"Timeout (>%ld.%06ld seconds) while waiting for ready signal on port %d",timeout.tv_sec,timeout.tv_usec,(55000+j));
 						}
 						else
 						{
-							syslog(LOG_INFO,("Delegating command \""+command[i]+"\" to thread on port "+std::to_string(55000+j)).c_str());
-							outWriter.open(path+std::to_string(55000+j)+".out");
-							outWriter<<id[i]<<std::endl;
-							outWriter<<command[i]<<std::endl;
-							outWriter.close();
-							break;
+							bytesReceived=recv(childSocket[j],dataBuffer,bufsize,0);
+							recvStr=std::string(dataBuffer,bytesReceived);
+							if(recvStr=="ready")
+							{
+								syslog(LOG_INFO,("Delegating command \""+command[i]+"\" to thread on port "+std::to_string(55000+j)).c_str());
+								outWriter.open(path+std::to_string(55000+j)+".out");
+								outWriter<<id[i]<<std::endl;
+								outWriter<<command[i]<<std::endl;
+								outWriter.close();
+								break;
+							}
 						}
+					}
+					if(j==7)
+					{
+						j=0;
 					}
 				}
 			}
