@@ -17,12 +17,39 @@
 #include <sstream>
 #include <climits>
 #include <thread>
+#include <signal.h>
 
 const int bufsize=4096;
 const int ms=1000;
+int childSocket[8];
 std::string path="/dev/shm/winrund/";
 
 //For security purposes, we don't allow any arguments to be passed into the daemon
+const char* getProcName(int procID)
+{
+	char* name = (char*)calloc(1024,sizeof(char));
+	if(name)
+	{
+		sprintf(name, "/proc/%d/cmdline",procID);
+		FILE* f = fopen(name,"r");
+
+		if(f)
+		{
+			size_t size;
+			size = fread(name, sizeof(char), 1024, f);
+
+			if(size>0)
+			{
+				if(name[size-1]=='\n')
+				{
+					name[size-1]='\0';
+				}
+				fclose(f);
+			}
+		}
+	}
+	return name;
+}
 bool fexists(const char *filename)
 {
 	std::ifstream ifile(filename);
@@ -53,7 +80,6 @@ void writeOutput(std::string cmdID, std::string filepath, std::string output, in
 				outstream.open((filepath+".lock").c_str());
 				outstream.close();
 				outstream.open(filepath);
-				syslog(LOG_INFO,("Writing \""+output+"\" to \""+filepath+"\"").c_str());
 				outstream<<output<<std::endl;
 				outstream.close();
 				remove((filepath+".lock").c_str());
@@ -75,13 +101,16 @@ void writeOutput(std::string cmdID, std::string filepath, std::string output, in
 }
 void sendData(std::string cmdID, std::string commandstr, std::string bCode, int s, int p)
 {
-	int sendRes, bytesReceived;
+	int sendRes, bytesReceived, rv;
 	char dataBuffer[bufsize];
 	std::string recvStr;
 	std::string outputFileName=(path+"_"+cmdID);
+	fd_set readfds, masterfds;
+	timeval timeout;
+	timeout.tv_sec=5;
+	timeout.tv_usec=0;
 
 	//Send command
-	syslog(LOG_DEBUG,(bCode+cmdID+commandstr+", "+std::to_string((bCode+cmdID+commandstr).length()+1)).c_str());
         sendRes=send(s,(bCode+cmdID+commandstr).c_str(),((bCode+cmdID+commandstr).length()+1),0);
 
         if(sendRes==-1)
@@ -95,9 +124,44 @@ void sendData(std::string cmdID, std::string commandstr, std::string bCode, int 
 	{	        
 		do
 		{
-			memset(dataBuffer,0,bufsize);
-	        	bytesReceived=recv(s,dataBuffer,bufsize,0);
-			recvStr=std::string(dataBuffer,bytesReceived);
+			//If the relavent instance of winrun is still running
+			if(kill(stoi(cmdID),0)==0&&std::string(getProcName(stoi(cmdID))).find(("winrun"+commandstr).c_str()))
+			{
+				memset(dataBuffer,0,bufsize);
+
+				FD_ZERO(&masterfds);
+				FD_SET(s,&masterfds);
+				memcpy(&readfds,&masterfds,sizeof(fd_set));
+				rv=select(s+1,&readfds,NULL,NULL,&timeout);
+
+				if(rv==SO_ERROR)
+				{
+					syslog(LOG_ERR,("Socket error during select() on PID \""+cmdID+"\"").c_str());
+					remove((path+"_"+cmdID).c_str());
+					remove((path+std::to_string(p)+".lock").c_str());
+					return;
+
+				}
+				else if(rv==0)
+				{
+					syslog(LOG_ERR,("Timeout ("+std::to_string(timeout.tv_sec)+" sec, "+std::to_string(timeout.tv_usec)+" usec) while waiting for continue signal for PID \""+cmdID+"\"").c_str());
+					remove((path+"_"+cmdID).c_str());
+					remove((path+std::to_string(p)+".lock").c_str());
+					return;
+				}
+				else
+				{
+					bytesReceived=recv(s,dataBuffer,bufsize,0);
+					recvStr=std::string(dataBuffer,bytesReceived);
+				}
+			}
+			else
+			{
+				syslog(LOG_NOTICE,("winrun not found for pid "+cmdID+" stopping command output").c_str());
+				remove((path+"_"+cmdID).c_str());
+				remove((path+std::to_string(p)+".lock").c_str());
+				return;
+			}
 		}while(recvStr.substr(0,recvStr.find("-"))!=cmdID);
 
 		//Create file with name equal to id (which should be the first string recieved)
@@ -155,6 +219,7 @@ int winrund_child(std::string IP,int port)
 	else
 	{
 		syslog(LOG_NOTICE,("Successfully connected to "+IP+":"+std::to_string(port)).c_str());
+		childSocket[port-55000]=sock;
 	}
 
 	//Recieve break code
@@ -209,6 +274,8 @@ int winrund_child(std::string IP,int port)
 				writestream.close();
 				sendData(std::to_string(id),("\""+command+"\""),breakCode,sock,port);
 				remove((path+std::to_string(port)+".lock").c_str());
+
+				syslog(LOG_INFO,("\""+command+"\" has completed for pid "+std::to_string(id)).c_str());
 			}
 		}
 		usleep(100*ms);
@@ -218,8 +285,9 @@ int main(void)
 {
 	//Define variables
 	pid_t pid, sid;
-	int ctr;
+	int ctr, rv;
 	int id[UCHAR_MAX];
+	char dataBuffer[bufsize];
 	std::string user=getlogin();
 	std::string ip="";
 	std::string configpath="/home/"+user+"/.config/winrun/config";
@@ -230,6 +298,11 @@ int main(void)
 	std::ifstream configReader;
 	std::ifstream outReader;
 	std::ofstream outWriter;
+	fd_set readfds, masterfds;
+	timeval timeout;
+	timeout.tv_sec=0;
+	timeout.tv_usec=10000;
+
 
 	//Fork the current process
 	pid = fork();
@@ -358,12 +431,36 @@ int main(void)
 				{
 					if(!fexists((path+std::to_string(55000+j)+".lock").c_str()))
 					{
-						syslog(LOG_INFO,("Delegating command \""+command[i]+"\" to thread on port "+std::to_string(55000+j)).c_str());
-						outWriter.open(path+std::to_string(55000+j)+".out");
-						outWriter<<id[i]<<std::endl;
-						outWriter<<command[i]<<std::endl;
-						outWriter.close();
-						break;
+						//Send ready signal to winrun_svr port to see if it is available
+						send(childSocket[j],std::string("ready").c_str(),(std::string("ready").size()+1),0);
+
+						memset(dataBuffer,0,bufsize);
+
+						FD_ZERO(&masterfds);
+						FD_SET(childSocket[j],&masterfds);
+						memcpy(&readfds,&masterfds,sizeof(fd_set));
+						rv=select(childSocket[j]+1,&readfds,NULL,NULL,&timeout);
+
+						if(rv==SO_ERROR)
+						{
+							syslog(LOG_ERR,("Socket error during select() for ready test on port "+std::to_string(55000+j)).c_str());
+							continue;
+
+						}
+						else if(rv==0)
+						{
+							syslog(LOG_ERR,("Timeout ("+std::to_string(timeout.tv_sec)+" sec, "+std::to_string(timeout.tv_usec)+" usec) while waiting for ready signal on port "+std::to_string(55000+j)+". PORT POSSIBLY HUNG RUNNING A COMMAND!!!").c_str());
+							continue;
+						}
+						else
+						{
+							syslog(LOG_INFO,("Delegating command \""+command[i]+"\" to thread on port "+std::to_string(55000+j)).c_str());
+							outWriter.open(path+std::to_string(55000+j)+".out");
+							outWriter<<id[i]<<std::endl;
+							outWriter<<command[i]<<std::endl;
+							outWriter.close();
+							break;
+						}
 					}
 				}
 			}
