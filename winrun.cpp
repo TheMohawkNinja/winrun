@@ -47,30 +47,30 @@ int main(int argc, char** argv)
 		//Attempt to open "out" file and wait 1ms if it cannot be opened
 		while(!writestream.is_open())
 		{
-			try
-			{
-				writestream.open((path+"out").c_str());
-			}
-			catch(...)
+			while(getOutputFile(path,"out.lock")!="")
 			{
 				usleep(1000);
 			}
+			writestream.open((path+"out.lock").c_str());
+			writestream.close();
+			writestream.open((path+"out").c_str());
 		}
 
 		writestream<<pid<<std::endl;
 		writestream<<argv[1]<<std::endl;
 		writestream.close();
+		remove((path+"out.lock").c_str());
 
 		//Attempt to open response file and dump contents to stdout
 		while(!readstream.is_open())
 		{
 			while(getOutputFile(path,std::to_string(pid).c_str())=="")
 			{
-				usleep(100);
+				usleep(1000);
 			}
 			while(getOutputFile(path,(std::to_string(pid)+".lock").c_str())!="")
 			{
-				usleep(100);
+				usleep(1000);
 			}
 			try
 			{
@@ -118,7 +118,7 @@ int main(int argc, char** argv)
 			catch(...)
 			{
 				std::cout<<"Failed to open \""<<outputpath<<"\", waiting one hundred microseconds!"<<std::endl;
-				usleep(100);
+				usleep(1000);
 			}
 		}
 	

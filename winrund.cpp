@@ -21,7 +21,6 @@
 
 const int bufsize=4096;
 const int ms=1000;
-int childSocket[8];
 std::string path="/dev/shm/winrund/";
 
 //For security purposes, we don't allow any arguments to be passed into the daemon
@@ -144,7 +143,7 @@ void sendData(std::string cmdID, std::string commandstr, std::string bCode, int 
 				}
 				else if(rv==0)
 				{
-					syslog(LOG_ERR,("Timeout ("+std::to_string(timeout.tv_sec)+" sec, "+std::to_string(timeout.tv_usec)+" usec) while waiting for continue signal for PID \""+cmdID+"\"").c_str());
+					syslog(LOG_ERR,("Timeout (>%ld.%06ld seconds) while waiting for continue signal for PID \"%s\"",timeout.tv_sec,timeout.tv_usec,cmdID.c_str()));
 					remove((path+"_"+cmdID).c_str());
 					remove((path+std::to_string(p)+".lock").c_str());
 					return;
@@ -178,6 +177,105 @@ void sendData(std::string cmdID, std::string commandstr, std::string bCode, int 
 				writeOutput(cmdID,outputFileName,recvStr.substr(recvStr.find("-")+1,(recvStr.length()-recvStr.substr(0,recvStr.find("-")+1).length())),s);
 	        	}
 		}
+	}
+}
+int winrund_check(std::string IP,int port)
+{
+	int sock=socket(AF_INET,SOCK_STREAM,0);
+	int connectRes=INT16_MAX;
+	int bytesReceived,rv;
+	char buf[bufsize];
+	char dataBuffer[bufsize];
+	std::string check_test_val,check_result_val;
+	std::string check_outpath=(path+"check");
+	std::ifstream readstream;
+	std::ofstream writestream;
+	fd_set readfds, masterfds;
+	timeval timeout;
+	timeout.tv_sec=0;
+	timeout.tv_usec=10*ms;
+
+	//Create a hint structure for the server we're connecting with
+	sockaddr_in hint;
+	hint.sin_family=AF_INET;
+	hint.sin_port=htons(port);
+	inet_pton(AF_INET,IP.c_str(),&hint.sin_addr);
+
+	if(sock==-1)
+	{
+		syslog(LOG_ERR,"Unable to create socket");
+		exit(EXIT_FAILURE);
+	}
+	else
+	{
+		syslog(LOG_NOTICE,"Successfully initialized socket");
+	}
+
+	//Connect to the server on the socket
+	connectRes=connect(sock,(sockaddr*)&hint,sizeof(hint));
+
+	if(connectRes==-1)
+	{
+		syslog(LOG_ERR,("Could not connect to \""+IP+"\":"+std::to_string(port)).c_str());
+		exit(EXIT_FAILURE);
+	}
+	else
+	{
+		syslog(LOG_NOTICE,("Successfully connected to "+IP+":"+std::to_string(port)).c_str());
+	}
+
+	//Enter daemon loop
+	while(1)
+	{
+		check_test_val="";
+
+		while(!fexists((check_outpath+".out").c_str()))
+		{
+			usleep(10*ms);
+		}
+		while(fexists((check_outpath+".lock").c_str()))
+		{
+			usleep(ms);
+		}
+
+		//Get value thread needs to check
+		readstream.open((check_outpath+".out").c_str());
+		getline(readstream,check_test_val);
+		readstream.close();
+		remove((check_outpath+".out").c_str());
+
+		//Send value to check, and wait for response
+		send(sock,check_test_val.c_str(),check_test_val.size()+1,0);
+
+		memset(dataBuffer,0,bufsize);
+
+	/*	FD_ZERO(&masterfds);
+		FD_SET(sock,&masterfds);
+		memcpy(&readfds,&masterfds,sizeof(fd_set));
+		timeout.tv_sec=1;	//Reset these, because otherwise they tend towards zero for some weird reason.
+		timeout.tv_usec=10*ms;	//
+		rv=select(sock,&readfds,NULL,NULL,&timeout);
+
+		if(rv==SO_ERROR)
+		{
+			syslog(LOG_ERR,("Socket error during select() for ready test on port "+std::to_string(port)).c_str());
+		}
+		else if(rv==0)
+		{
+			syslog(LOG_ERR,"Timeout (>%ld.%06ld seconds) while waiting for ready signal on port %d",timeout.tv_sec,timeout.tv_usec,(port));
+		}
+		else
+		{*/
+			bytesReceived=recv(sock,dataBuffer,bufsize,0);
+			check_result_val=std::string(dataBuffer,bytesReceived);
+
+			writestream.open((path+check_test_val+"_.lock").c_str());
+			writestream.close();
+			writestream.open((path+check_test_val+"_").c_str());
+			writestream<<check_result_val;
+			writestream.close();
+			remove((path+check_test_val+"_.lock").c_str());
+		//}
 	}
 }
 int winrund_child(std::string IP,int port)
@@ -219,7 +317,6 @@ int winrund_child(std::string IP,int port)
 	else
 	{
 		syslog(LOG_NOTICE,("Successfully connected to "+IP+":"+std::to_string(port)).c_str());
-		childSocket[port-55000]=sock;
 	}
 
 	//Recieve break code
@@ -285,7 +382,7 @@ int main(void)
 {
 	//Define variables
 	pid_t pid, sid;
-	int ctr, rv, bytesReceived;
+	int ctr;
 	int id[UCHAR_MAX];
 	char dataBuffer[bufsize];
 	std::string user=getlogin();
@@ -299,12 +396,7 @@ int main(void)
 	std::ifstream configReader;
 	std::ifstream outReader;
 	std::ofstream outWriter;
-	fd_set readfds, masterfds;
-	timeval timeout;
-	timeout.tv_sec=0;
-	timeout.tv_usec=10*ms;
-
-
+	
 	//Fork the current process
 	pid = fork();
 
@@ -326,7 +418,7 @@ int main(void)
 	//Open system logs for the child process
 	openlog("winrund", LOG_NOWAIT | LOG_PID, LOG_USER);
 	syslog(LOG_NOTICE, "Successfully started winrund");
-
+	
 	//Generate a session ID for the child process
 	sid = setsid();
 
@@ -377,7 +469,10 @@ int main(void)
 	}
 
 	//Spawn child threads
-	for(int i=0; i<8; i++)
+	std::thread winrund_check_thread(winrund_check,ip,55000);
+	winrund_check_thread.detach();
+
+	for(int i=1; i<=8; i++)
 	{
 		std::thread winrund_child_thread(winrund_child,ip,(55000+i));
 		winrund_child_thread.detach();
@@ -390,16 +485,16 @@ int main(void)
 		//Attempt to open requested commands list and repeat every 100 milliseconds until it opens.
 		while(!outReader.is_open())
 		{
-			try
+			usleep(100*ms);
+
+			while(fexists((outpath+".lock").c_str()))
 			{
-				outReader.open(outpath);
-				break;
+				usleep(ms);
 			}
-			catch(...)
-			{
-				syslog(LOG_WARNING,("Can't open \""+outpath+"\", waiting 100ms").c_str());
-				usleep(100*ms);
-			}
+
+			outWriter.open((outpath+".lock").c_str());
+			outReader.open(outpath);
+			break;
 		}
 
 		//Read in requested commands
@@ -419,6 +514,7 @@ int main(void)
 		}
 		outReader.close();
 		remove(outpath.c_str());
+		remove((outpath+".lock").c_str());
 
 		outWriter.open(outpath);
 		outWriter.close();
@@ -428,45 +524,43 @@ int main(void)
 		{
 			for(int i=0; i<ctr; i++)
 			{
-				for(int j=0; j<8; j++)
+				for(int j=1; j<=8; j++)
 				{
 					if(!fexists((path+std::to_string(55000+j)+".lock").c_str()))
 					{
-						//Send ready signal to winrun_svr port to see if it is available
-						send(childSocket[j],std::string("ready").c_str(),(std::string("ready").size()+1),0);
+						//Check to see if server thread is idle
+						outWriter.open((path+"check.lock").c_str());
+						outWriter.close();
+						outWriter.open((path+"check.out").c_str());
+						outWriter<<j;
+						outWriter.close();
+						remove((path+"check.lock").c_str());
 
-						memset(dataBuffer,0,bufsize);
-
-						FD_ZERO(&masterfds);
-						FD_ZERO(&readfds);
-						FD_SET(childSocket[j],&masterfds);
-						memcpy(&readfds,&masterfds,sizeof(fd_set));
-						rv=select(childSocket[j]+1,&readfds,NULL,NULL,&timeout);
-
-						if(rv==SO_ERROR)
+						while(!fexists((path+std::to_string(j)+"_").c_str()))
 						{
-							syslog(LOG_ERR,("Socket error during select() for ready test on port "+std::to_string(55000+j)).c_str());
+							usleep(ms);
 						}
-						else if(rv==0)
+						while(fexists((path+std::to_string(j)+"_.lock").c_str()))
 						{
-							syslog(LOG_ERR,"Timeout (>%ld.%06ld seconds) while waiting for ready signal on port %d",timeout.tv_sec,timeout.tv_usec,(55000+j));
+							usleep(ms);
 						}
-						else
+
+						outReader.open((path+std::to_string(j)+"_").c_str());
+						getline(outReader,recvStr);
+						outReader.close();
+						remove((path+std::to_string(j)+"_").c_str());
+
+						if(recvStr=="0")
 						{
-							bytesReceived=recv(childSocket[j],dataBuffer,bufsize,0);
-							recvStr=std::string(dataBuffer,bytesReceived);
-							if(recvStr=="ready")
-							{
-								syslog(LOG_INFO,("Delegating command \""+command[i]+"\" to thread on port "+std::to_string(55000+j)).c_str());
-								outWriter.open(path+std::to_string(55000+j)+".out");
-								outWriter<<id[i]<<std::endl;
-								outWriter<<command[i]<<std::endl;
-								outWriter.close();
-								break;
-							}
+							syslog(LOG_INFO,("Delegating command \""+command[i]+"\" to thread on port "+std::to_string(55000+j)).c_str());
+							outWriter.open(path+std::to_string(55000+j)+".out");
+							outWriter<<id[i]<<std::endl;
+							outWriter<<command[i]<<std::endl;
+							outWriter.close();
+							break;
 						}
 					}
-					if(j==7)
+					if(j==8)
 					{
 						j=0;
 					}
