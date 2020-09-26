@@ -66,29 +66,51 @@ bool dexists(const char *directory)
 		return false;
 	}
 }
+int waitForTimeout(std::string id, int s, int secs, int usecs, std::string action)
+{
+	int rv;
+	fd_set readfds, masterfds;
+	timeval timeout;
+
+	timeout.tv_sec=secs;
+	timeout.tv_usec=usecs;
+	FD_ZERO(&masterfds);
+	FD_SET(s,&masterfds);
+	memcpy(&readfds,&masterfds,sizeof(fd_set));
+	rv=select(s+1,&readfds,NULL,NULL,&timeout);
+
+	if(rv==SO_ERROR)
+	{
+		syslog(LOG_ERR,"Socket error during select() on PID %s",id);
+
+	}
+	else if(rv==0)
+	{
+		syslog(LOG_ERR,"Timeout (>%ld.%06ld seconds) while waiting for %s for PID %s",timeout.tv_sec,timeout.tv_usec,action,id);
+	}
+
+	return rv;
+}
 void writeOutput(std::string cmdID, std::string filepath, std::string output, int s)
 {
 	std::ofstream outstream;
 
 	while(!outstream.is_open())
 	{
-		try
+		while(fexists((filepath+".lock").c_str()))
 		{
-			if(!fexists(filepath.c_str()))
-			{
-				outstream.open((filepath+".lock").c_str());
-				outstream.close();
-				outstream.open(filepath);
-				outstream<<output<<std::endl;
-				outstream.close();
-				remove((filepath+".lock").c_str());
-				break;
-			}
+			usleep(ms);
 		}
-		catch(...)
+	
+		if(!fexists(filepath.c_str()))
 		{
-			syslog(LOG_WARNING,("Can't open \""+filepath+"\", waiting 100ms").c_str());
-			usleep(100*ms);
+			outstream.open((filepath+".lock").c_str());
+			outstream.close();
+			outstream.open(filepath);
+			outstream<<output<<std::endl;
+			outstream.close();
+			remove((filepath+".lock").c_str());
+			break;
 		}
 	}
 
@@ -100,14 +122,10 @@ void writeOutput(std::string cmdID, std::string filepath, std::string output, in
 }
 void sendData(std::string cmdID, std::string commandstr, std::string bCode, int s, int p)
 {
-	int sendRes, bytesReceived, rv;
+	int sendRes, bytesReceived, timeoutRes;
 	char dataBuffer[bufsize];
 	std::string recvStr;
 	std::string outputFileName=(path+"_"+cmdID);
-	fd_set readfds, masterfds;
-	timeval timeout;
-	timeout.tv_sec=5;
-	timeout.tv_usec=0;
 
 	//Send command
         sendRes=send(s,(bCode+cmdID+commandstr).c_str(),((bCode+cmdID+commandstr).length()+1),0);
@@ -128,22 +146,17 @@ void sendData(std::string cmdID, std::string commandstr, std::string bCode, int 
 			{
 				memset(dataBuffer,0,bufsize);
 
-				FD_ZERO(&masterfds);
-				FD_SET(s,&masterfds);
-				memcpy(&readfds,&masterfds,sizeof(fd_set));
-				rv=select(s+1,&readfds,NULL,NULL,&timeout);
+				timeoutRes=waitForTimeout(cmdID,s,5,0,"continue signal");
 
-				if(rv==SO_ERROR)
+				if(timeoutRes==SO_ERROR)
 				{
-					syslog(LOG_ERR,("Socket error during select() on PID \""+cmdID+"\"").c_str());
 					remove((path+"_"+cmdID).c_str());
 					remove((path+std::to_string(p)+".lock").c_str());
 					return;
 
 				}
-				else if(rv==0)
+				else if(timeoutRes==0)
 				{
-					syslog(LOG_ERR,("Timeout (>%ld.%06ld seconds) while waiting for continue signal for PID \"%s\"",timeout.tv_sec,timeout.tv_usec,cmdID.c_str()));
 					remove((path+"_"+cmdID).c_str());
 					remove((path+std::to_string(p)+".lock").c_str());
 					return;
@@ -156,7 +169,7 @@ void sendData(std::string cmdID, std::string commandstr, std::string bCode, int 
 			}
 			else
 			{
-				syslog(LOG_NOTICE,("winrun not found for pid "+cmdID+" stopping command output").c_str());
+				syslog(LOG_NOTICE,"winrun not found for PID %s, stopping command output",cmdID);
 				remove((path+"_"+cmdID).c_str());
 				remove((path+std::to_string(p)+".lock").c_str());
 				return;
@@ -183,17 +196,13 @@ int winrund_check(std::string IP,int port)
 {
 	int sock=socket(AF_INET,SOCK_STREAM,0);
 	int connectRes=INT16_MAX;
-	int bytesReceived,rv;
+	int bytesReceived,timeoutRes;
 	char buf[bufsize];
 	char dataBuffer[bufsize];
 	std::string check_test_val,check_result_val;
 	std::string check_outpath=(path+"check");
 	std::ifstream readstream;
 	std::ofstream writestream;
-	fd_set readfds, masterfds;
-	timeval timeout;
-	timeout.tv_sec=0;
-	timeout.tv_usec=10*ms;
 
 	//Create a hint structure for the server we're connecting with
 	sockaddr_in hint;
@@ -216,12 +225,12 @@ int winrund_check(std::string IP,int port)
 
 	if(connectRes==-1)
 	{
-		syslog(LOG_ERR,("Could not connect to \""+IP+"\":"+std::to_string(port)).c_str());
+		syslog(LOG_ERR,"Could not connect to %s:%d",IP,port);
 		exit(EXIT_FAILURE);
 	}
 	else
 	{
-		syslog(LOG_NOTICE,("Successfully connected to "+IP+":"+std::to_string(port)).c_str());
+		syslog(LOG_NOTICE,"Successfully connected to %s:%d",IP,port);
 	}
 
 	//Enter daemon loop
@@ -249,33 +258,30 @@ int winrund_check(std::string IP,int port)
 
 		memset(dataBuffer,0,bufsize);
 
-	/*	FD_ZERO(&masterfds);
-		FD_SET(sock,&masterfds);
-		memcpy(&readfds,&masterfds,sizeof(fd_set));
-		timeout.tv_sec=1;	//Reset these, because otherwise they tend towards zero for some weird reason.
-		timeout.tv_usec=10*ms;	//
-		rv=select(sock,&readfds,NULL,NULL,&timeout);
+		timeoutRes=waitForTimeout("N/A",sock,1,0,"thread idle/busy signal");
 
-		if(rv==SO_ERROR)
+		writestream.open((path+check_test_val+"_.lock").c_str());
+		writestream.close();
+		writestream.open((path+check_test_val+"_").c_str());
+
+		if(timeoutRes==SO_ERROR)
 		{
-			syslog(LOG_ERR,("Socket error during select() for ready test on port "+std::to_string(port)).c_str());
+			writestream<<-1;
 		}
-		else if(rv==0)
+		else if(timeoutRes==0)
 		{
-			syslog(LOG_ERR,"Timeout (>%ld.%06ld seconds) while waiting for ready signal on port %d",timeout.tv_sec,timeout.tv_usec,(port));
+			writestream<<-2;
 		}
 		else
-		{*/
+		{
 			bytesReceived=recv(sock,dataBuffer,bufsize,0);
 			check_result_val=std::string(dataBuffer,bytesReceived);
 
-			writestream.open((path+check_test_val+"_.lock").c_str());
-			writestream.close();
-			writestream.open((path+check_test_val+"_").c_str());
 			writestream<<check_result_val;
-			writestream.close();
-			remove((path+check_test_val+"_.lock").c_str());
-		//}
+		}
+
+		writestream.close();
+		remove((path+check_test_val+"_.lock").c_str());
 	}
 }
 int winrund_child(std::string IP,int port)
@@ -311,12 +317,12 @@ int winrund_child(std::string IP,int port)
 
 	if(connectRes==-1)
 	{
-		syslog(LOG_ERR,("Could not connect to \""+IP+"\":"+std::to_string(port)).c_str());
+		syslog(LOG_ERR,"Could not connect to %s:%d",IP,port);
 		exit(EXIT_FAILURE);
 	}
 	else
 	{
-		syslog(LOG_NOTICE,("Successfully connected to "+IP+":"+std::to_string(port)).c_str());
+		syslog(LOG_NOTICE,"Successfully connected to %s:%d",IP,port);
 	}
 
 	//Recieve break code
@@ -340,7 +346,7 @@ int winrund_child(std::string IP,int port)
 				}
 				catch(...)
 				{
-					syslog(LOG_WARNING,("Can't open \""+child_outpath+"\", waiting 100ms").c_str());
+					syslog(LOG_WARNING,"Can't open \"%s\", waiting 100ms",child_outpath);
 					usleep(100*ms);
 				}
 			}
@@ -365,14 +371,14 @@ int winrund_child(std::string IP,int port)
 			//Run commands if they exist
 			if(id!=0)
 			{
-				syslog(LOG_INFO,("Sending command \""+command+"\" for pid "+std::to_string(id)+" over port "+std::to_string(port)).c_str());
+				syslog(LOG_INFO,"Sending command \"%s\" for PID %d over port %d",command,id,port);
 
 				writestream.open((path+std::to_string(port)+".lock").c_str());
 				writestream.close();
 				sendData(std::to_string(id),("\""+command+"\""),breakCode,sock,port);
 				remove((path+std::to_string(port)+".lock").c_str());
 
-				syslog(LOG_INFO,("\""+command+"\" has completed for pid "+std::to_string(id)).c_str());
+				syslog(LOG_INFO,"\"%s\" has completed for PID %d",command,id);
 			}
 		}
 		usleep(100*ms);
@@ -493,6 +499,7 @@ int main(void)
 			}
 
 			outWriter.open((outpath+".lock").c_str());
+			outWriter.close();
 			outReader.open(outpath);
 			break;
 		}
@@ -552,7 +559,7 @@ int main(void)
 
 						if(recvStr=="0")
 						{
-							syslog(LOG_INFO,("Delegating command \""+command[i]+"\" to thread on port "+std::to_string(55000+j)).c_str());
+							syslog(LOG_INFO,"Delegating command \"%s\" to thread on port %d",command[i],(55000+j));
 							outWriter.open(path+std::to_string(55000+j)+".out");
 							outWriter<<id[i]<<std::endl;
 							outWriter<<command[i]<<std::endl;
