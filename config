@@ -1,0 +1,9 @@
+# IP address where winrun_svr is located
+ip=192.168.1.10
+
+# Maximum number of simultaneous commands allowed to be run at once (MUST MATCH WINRUN_SVR CONFIG!!!)
+threads=8
+
+# Base port that the client will attempt to connect on. The client will attempt to connect from this port through that port plus "threads"
+# Therefore, if the base port is 55000, and "threads" is set to 4, the client will attempt to connect on ports 55000, 55001, 55002, 55003, and 55004 (MUST MATCH WINRUN_SVR CONFIG!!!)
+port=55000
