@@ -39,7 +39,7 @@ int main(int argc, char** argv)
 	//If user just types in "winrun"
 	if(!argv[1])
 	{
-		std::cout<<"No command entered!"<<std::endl;
+		fprintf(stderr,"No command entered\n");
 		return -1;
 	}
 	else
@@ -85,7 +85,7 @@ int main(int argc, char** argv)
 						stoi(line.substr(0,dashIndex));
 
 						//std::cout<<"(Line "+line.substr(0,dashIndex)+"): "+line.substr((dashIndex+1),(line.length()-(line.substr(0,dashIndex+1).length())))<<std::endl;
-						std::cout<<line.substr((dashIndex+1),(line.length()-(line.substr(0,dashIndex+1).length())))<<std::endl;
+						fprintf(stdout,"%s\n",line.substr((dashIndex+1),(line.length()-(line.substr(0,dashIndex+1).length()))).c_str());
 
 						readstream.close();
 						remove(outputpath.c_str());
@@ -117,7 +117,6 @@ int main(int argc, char** argv)
 			}
 			catch(...)
 			{
-				std::cout<<"Failed to open \""<<outputpath<<"\", waiting one hundred microseconds!"<<std::endl;
 				usleep(1000);
 			}
 		}
