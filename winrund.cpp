@@ -66,14 +66,14 @@ bool dexists(const char *directory)
 		return false;
 	}
 }
-int waitForTimeout(std::string id, int s, int secs, int usecs, std::string action)
+int waitForTimeout(std::string id, int s, int secs, std::string action)
 {
 	int rv;
 	fd_set readfds, masterfds;
 	timeval timeout;
 
 	timeout.tv_sec=secs;
-	timeout.tv_usec=usecs;
+	timeout.tv_usec=0;
 	FD_ZERO(&masterfds);
 	FD_SET(s,&masterfds);
 	memcpy(&readfds,&masterfds,sizeof(fd_set));
@@ -81,12 +81,12 @@ int waitForTimeout(std::string id, int s, int secs, int usecs, std::string actio
 
 	if(rv==SO_ERROR)
 	{
-		syslog(LOG_ERR,"Socket error during select() on PID %s",id);
+		syslog(LOG_ERR,"Socket error during select() on PID %s",id.c_str());
 
 	}
 	else if(rv==0)
 	{
-		syslog(LOG_ERR,"Timeout (>%ld.%06ld seconds) while waiting for %s for PID %s",timeout.tv_sec,timeout.tv_usec,action,id);
+		syslog(LOG_ERR,"Timeout (>%ld.%06ld seconds) while waiting for %s for PID %s",timeout.tv_sec,timeout.tv_usec,action.c_str(),id.c_str());
 	}
 
 	return rv;
@@ -120,6 +120,29 @@ void writeOutput(std::string cmdID, std::string filepath, std::string output, in
 		send(s,(cmdID+"-1").c_str(),(std::string(cmdID+"1").size()+1),0);
 	}
 }
+void writeOutput(std::string filepath, std::string output)
+{
+	std::ofstream outstream;
+
+	while(!outstream.is_open())
+	{
+		while(fexists((filepath+".lock").c_str()))
+		{
+			usleep(ms);
+		}
+	
+		if(!fexists(filepath.c_str()))
+		{
+			outstream.open((filepath+".lock").c_str());
+			outstream.close();
+			outstream.open(filepath);
+			outstream<<output<<std::endl;
+			outstream.close();
+			remove((filepath+".lock").c_str());
+			break;
+		}
+	}
+}
 void sendData(std::string cmdID, std::string commandstr, std::string bCode, int s, int p)
 {
 	int sendRes, bytesReceived, timeoutRes;
@@ -146,18 +169,26 @@ void sendData(std::string cmdID, std::string commandstr, std::string bCode, int 
 			{
 				memset(dataBuffer,0,bufsize);
 
-				timeoutRes=waitForTimeout(cmdID,s,5,0,"continue signal");
+				timeoutRes=waitForTimeout(cmdID,s,5,"continue signal");
 
 				if(timeoutRes==SO_ERROR)
 				{
-					remove((path+"_"+cmdID).c_str());
+					writeOutput(outputFileName,std::to_string(ULLONG_MAX)+"-(winrund) A socket error occured while waiting for next line of output");
+					usleep(100*ms);
+					writeOutput(outputFileName,cmdID+cmdID+cmdID+cmdID+cmdID);
+					usleep(100*ms);
+					remove(outputFileName.c_str());
 					remove((path+std::to_string(p)+".lock").c_str());
 					return;
 
 				}
 				else if(timeoutRes==0)
 				{
-					remove((path+"_"+cmdID).c_str());
+					writeOutput(outputFileName,std::to_string(ULLONG_MAX)+"-(winrund) A timeout error occured while waiting for next line of output");
+					usleep(100*ms);
+					writeOutput(outputFileName,cmdID+cmdID+cmdID+cmdID+cmdID);
+					usleep(100*ms);
+					remove((outputFileName).c_str());
 					remove((path+std::to_string(p)+".lock").c_str());
 					return;
 				}
@@ -169,7 +200,7 @@ void sendData(std::string cmdID, std::string commandstr, std::string bCode, int 
 			}
 			else
 			{
-				syslog(LOG_NOTICE,"winrun not found for PID %s, stopping command output",cmdID);
+				syslog(LOG_NOTICE,"winrun not found for PID %s, stopping command output",cmdID.c_str());
 				remove((path+"_"+cmdID).c_str());
 				remove((path+std::to_string(p)+".lock").c_str());
 				return;
@@ -212,12 +243,12 @@ int winrund_check(std::string IP,int port)
 
 	if(sock==-1)
 	{
-		syslog(LOG_ERR,"Unable to create socket");
+		syslog(LOG_ERR,"Unable to create socket on port %d",port);
 		exit(EXIT_FAILURE);
 	}
 	else
 	{
-		syslog(LOG_NOTICE,"Successfully initialized socket");
+		syslog(LOG_NOTICE,"Successfully initialized socket %d on port %d",sock,port);
 	}
 
 	//Connect to the server on the socket
@@ -225,12 +256,12 @@ int winrund_check(std::string IP,int port)
 
 	if(connectRes==-1)
 	{
-		syslog(LOG_ERR,"Could not connect to %s:%d",IP,port);
+		syslog(LOG_ERR,"Could not connect to %s:%d",IP.c_str(),port);
 		exit(EXIT_FAILURE);
 	}
 	else
 	{
-		syslog(LOG_NOTICE,"Successfully connected to %s:%d",IP,port);
+		syslog(LOG_NOTICE,"Successfully connected to %s:%d",IP.c_str(),port);
 	}
 
 	//Enter daemon loop
@@ -258,7 +289,7 @@ int winrund_check(std::string IP,int port)
 
 		memset(dataBuffer,0,bufsize);
 
-		timeoutRes=waitForTimeout("N/A",sock,1,0,"thread idle/busy signal");
+		timeoutRes=waitForTimeout("N/A",sock,1,"thread idle/busy signal");
 
 		writestream.open((path+check_test_val+"_.lock").c_str());
 		writestream.close();
@@ -304,12 +335,12 @@ int winrund_child(std::string IP,int port)
 
 	if(sock==-1)
 	{
-		syslog(LOG_ERR,"Unable to create socket");
+		syslog(LOG_ERR,"Unable to create socket on port %d",port);
 		exit(EXIT_FAILURE);
 	}
 	else
 	{
-		syslog(LOG_NOTICE,"Successfully initialized socket");
+		syslog(LOG_NOTICE,"Successfully initialized socket %d on port %d",sock,port);
 	}
 
 	//Connect to the server on the socket
@@ -317,12 +348,12 @@ int winrund_child(std::string IP,int port)
 
 	if(connectRes==-1)
 	{
-		syslog(LOG_ERR,"Could not connect to %s:%d",IP,port);
+		syslog(LOG_ERR,"Could not connect to %s:%d",IP.c_str(),port);
 		exit(EXIT_FAILURE);
 	}
 	else
 	{
-		syslog(LOG_NOTICE,"Successfully connected to %s:%d",IP,port);
+		syslog(LOG_NOTICE,"Successfully connected to %s:%d",IP.c_str(),port);
 	}
 
 	//Recieve break code
@@ -346,7 +377,7 @@ int winrund_child(std::string IP,int port)
 				}
 				catch(...)
 				{
-					syslog(LOG_WARNING,"Can't open \"%s\", waiting 100ms",child_outpath);
+					syslog(LOG_WARNING,"Can't open \"%s\", waiting 100ms",child_outpath.c_str());
 					usleep(100*ms);
 				}
 			}
@@ -371,14 +402,14 @@ int winrund_child(std::string IP,int port)
 			//Run commands if they exist
 			if(id!=0)
 			{
-				syslog(LOG_INFO,"Sending command \"%s\" for PID %d over port %d",command,id,port);
+				syslog(LOG_INFO,"Sending command \"%s\" for PID %d over port %d",command.c_str(),id,port);
 
 				writestream.open((path+std::to_string(port)+".lock").c_str());
 				writestream.close();
 				sendData(std::to_string(id),("\""+command+"\""),breakCode,sock,port);
 				remove((path+std::to_string(port)+".lock").c_str());
 
-				syslog(LOG_INFO,"\"%s\" has completed for PID %d",command,id);
+				syslog(LOG_INFO,"\"%s\" has completed for PID %d",command.c_str(),id);
 			}
 		}
 		usleep(100*ms);
@@ -388,17 +419,18 @@ int main(void)
 {
 	//Define variables
 	pid_t pid, sid;
-	int ctr;
-	int id[UCHAR_MAX];
+	int ctr, maxThreads, basePort;
+	int* id;
 	char dataBuffer[bufsize];
 	std::string user=getlogin();
 	std::string ip="";
-	std::string configpath="/home/"+user+"/.config/winrun/config";
+	std::string configpath="/home/"+user+"/.config/winrund/config";
 	std::string outpath=path+"out";
 	std::string idstr;
 	std::string recvStr;
-	std::string writeBuffer[UCHAR_MAX];
-	std::string command[UCHAR_MAX];
+	std::string line;
+	std::string* writeBuffer;
+	std::string* command;
 	std::ifstream configReader;
 	std::ifstream outReader;
 	std::ofstream outWriter;
@@ -458,9 +490,41 @@ int main(void)
 	//				Daemon-specific intialization				 //
 	//---------------------------------------------------------------------------------------//
 
-	//Get IP address
-	configReader.open(configpath);
-	getline(configReader,ip);
+	//Get configuration information
+	try
+	{
+		configReader.open(configpath);
+
+		while(!configReader.eof())
+		{
+			getline(configReader,line);
+
+			if(line.substr(0,1)!="#")//Hashtag denotes comments
+			{
+				if(line.find("ip")==0)
+				{
+					ip=line.substr(line.find("=")+1,line.length()-line.find("="));
+				}
+				else if(line.find("threads")==0)
+				{
+					maxThreads=stoi(line.substr(line.find("=")+1,line.length()-line.find("=")));
+
+					id=new int[maxThreads];
+					writeBuffer=new std::string[maxThreads];
+					command=new std::string[maxThreads];
+				}
+				else if(line.find("port")==0)
+				{
+					basePort=stoi(line.substr(line.find("=")+1,line.length()-line.find("=")));
+				}
+			}
+		}
+	}
+	catch(...)
+	{
+		syslog(LOG_ERR,"Error while attempting to read config file at \"%s\"",configpath.c_str());
+		exit(EXIT_FAILURE);
+	}
 	configReader.close();
 
 	//Initialize ingoing and outgoing files, along with containing directory
@@ -475,12 +539,12 @@ int main(void)
 	}
 
 	//Spawn child threads
-	std::thread winrund_check_thread(winrund_check,ip,55000);
+	std::thread winrund_check_thread(winrund_check,ip,basePort);
 	winrund_check_thread.detach();
 
-	for(int i=1; i<=8; i++)
+	for(int i=1; i<=maxThreads; i++)
 	{
-		std::thread winrund_child_thread(winrund_child,ip,(55000+i));
+		std::thread winrund_child_thread(winrund_child,ip,(basePort+i));
 		winrund_child_thread.detach();
 	}
 
@@ -531,9 +595,9 @@ int main(void)
 		{
 			for(int i=0; i<ctr; i++)
 			{
-				for(int j=1; j<=8; j++)
+				for(int j=1; j<=maxThreads; j++)
 				{
-					if(!fexists((path+std::to_string(55000+j)+".lock").c_str()))
+					if(!fexists((path+std::to_string(basePort+j)+".lock").c_str()))
 					{
 						//Check to see if server thread is idle
 						outWriter.open((path+"check.lock").c_str());
@@ -559,8 +623,8 @@ int main(void)
 
 						if(recvStr=="0")
 						{
-							syslog(LOG_INFO,"Delegating command \"%s\" to thread on port %d",command[i],(55000+j));
-							outWriter.open(path+std::to_string(55000+j)+".out");
+							syslog(LOG_INFO,"Delegating command \"%s\" to thread on port %d",command[i].c_str(),(basePort+j));
+							outWriter.open(path+std::to_string(basePort+j)+".out");
 							outWriter<<id[i]<<std::endl;
 							outWriter<<command[i]<<std::endl;
 							outWriter.close();
@@ -576,7 +640,7 @@ int main(void)
 		}
 
 		//Reset arrays
-		for(int i=0; i<UCHAR_MAX; i++)
+		for(int i=0; i<maxThreads; i++)
 		{
 			id[i]=0;
 			command[i]="";
