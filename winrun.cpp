@@ -82,7 +82,7 @@ int main(int argc, char** argv)
 					try
 					{
 						//Test if it is a valid line number before outputting
-						stoi(line.substr(0,dashIndex));
+						stoull(line.substr(0,dashIndex));
 
 						//std::cout<<"(Line "+line.substr(0,dashIndex)+"): "+line.substr((dashIndex+1),(line.length()-(line.substr(0,dashIndex+1).length())))<<std::endl;
 						fprintf(stdout,"%s\n",line.substr((dashIndex+1),(line.length()-(line.substr(0,dashIndex+1).length()))).c_str());
