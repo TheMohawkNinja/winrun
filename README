@@ -15,9 +15,9 @@ INSTALLATION
 
 CONFIGURATION
 
-	You will need to create a text file called "config" located at "~/.config/winrun" and put the target IP in there.
+	Copy the config file to "~/.config/winrund" and edit acccordingly.
 
-	winrund, the daemon program for handling the network traffic, should be started on login. Connection and output logs are in journalctl.
+	winrund, the daemon program for handling the network traffic, should be started on login. Logs are in journalctl.
 
 KNOWN ISSUES
 
