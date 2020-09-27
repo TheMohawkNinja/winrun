@@ -27,6 +27,7 @@ std::string getOutputFile(std::string filepath, const char *filename)
 }
 int main(int argc, char** argv)
 {
+	int ms=1000;
 	int lineNum,dashIndex;
 	pid_t pid=getpid();
 	std::string path="/dev/shm/winrund/";
@@ -49,7 +50,7 @@ int main(int argc, char** argv)
 		{
 			while(getOutputFile(path,"out.lock")!="")
 			{
-				usleep(1000);
+				usleep(ms);
 			}
 			writestream.open((path+"out.lock").c_str());
 			writestream.close();
@@ -66,58 +67,48 @@ int main(int argc, char** argv)
 		{
 			while(getOutputFile(path,std::to_string(pid).c_str())=="")
 			{
-				usleep(1000);
+				usleep(ms);
 			}
 			while(getOutputFile(path,(std::to_string(pid)+".lock").c_str())!="")
 			{
-				usleep(1000);
+				usleep(ms);
 			}
-			try
+
+			readstream.open(outputpath);
+			std::getline(readstream,line);
+			if(line!=lastLine&&line!=(std::to_string(pid)+std::to_string(pid)+std::to_string(pid)+std::to_string(pid)+std::to_string(pid)))
 			{
-				readstream.open(outputpath);
-				std::getline(readstream,line);
-				if(line!=lastLine&&line!=(std::to_string(pid)+std::to_string(pid)+std::to_string(pid)+std::to_string(pid)+std::to_string(pid)))
+				dashIndex=line.find("-");
+				try
 				{
-					dashIndex=line.find("-");
-					try
-					{
-						//Test if it is a valid line number before outputting
-						stoull(line.substr(0,dashIndex));
+					//Test if it is a valid line number before outputting
+					stoull(line.substr(0,dashIndex));
 
-						//std::cout<<"(Line "+line.substr(0,dashIndex)+"): "+line.substr((dashIndex+1),(line.length()-(line.substr(0,dashIndex+1).length())))<<std::endl;
-						fprintf(stdout,"%s\n",line.substr((dashIndex+1),(line.length()-(line.substr(0,dashIndex+1).length()))).c_str());
+					//std::cout<<"(Line "+line.substr(0,dashIndex)+"): "+line.substr((dashIndex+1),(line.length()-(line.substr(0,dashIndex+1).length())))<<std::endl;
+					fprintf(stdout,"%s\n",line.substr((dashIndex+1),(line.length()-(line.substr(0,dashIndex+1).length()))).c_str());
 
-						readstream.close();
-						remove(outputpath.c_str());
-
-						lineNum=stoi(line.substr(0,line.find("-")));
-
-						lastLine=line;
-					}
-					catch(...)
-					{
-						readstream.close();
-						remove(outputpath.c_str());
-					}
-
-					continue;
-				}
-				else if(line==lastLine)
-				{
 					readstream.close();
 					remove(outputpath.c_str());
 
-					continue;
+					lineNum=stoi(line.substr(0,line.find("-")));
+
+					lastLine=line;
 				}
-				else
+				catch(...)
 				{
+					readstream.close();
 					remove(outputpath.c_str());
-					return 0;
 				}
 			}
-			catch(...)
+			else if(line==lastLine)
 			{
-				usleep(1000);
+				readstream.close();
+				remove(outputpath.c_str());
+			}
+			else
+			{
+				remove(outputpath.c_str());
+				return 0;
 			}
 		}
 	
