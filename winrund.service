@@ -1,0 +1,9 @@
+[Unit]
+Description=Daemon for the winrun program
+
+[Service]
+Type=forking
+ExecStart=/usr/bin/winrund
+
+[Install]
+WantedBy=multi-user.target
