@@ -97,6 +97,10 @@ void writeOutput(std::string cmdID, std::string filepath, std::string output, in
 
 	while(!outstream.is_open())
 	{
+		while(fexists((filepath).c_str()))
+		{
+			usleep(ms);
+		}
 		while(fexists((filepath+".lock").c_str()))
 		{
 			usleep(ms);
@@ -126,6 +130,10 @@ void writeOutput(std::string filepath, std::string output)
 
 	while(!outstream.is_open())
 	{
+		while(fexists((filepath).c_str()))
+		{
+			usleep(ms);
+		}
 		while(fexists((filepath+".lock").c_str()))
 		{
 			usleep(ms);
@@ -173,22 +181,16 @@ void sendData(std::string cmdID, std::string commandstr, std::string bCode, int 
 
 				if(timeoutRes==SO_ERROR)
 				{
-					writeOutput(outputFileName,std::to_string(ULLONG_MAX)+"-(winrund) A socket error occured while waiting for next line of output");
-					usleep(100*ms);
+					writeOutput(outputFileName,std::to_string(ULLONG_MAX)+"-\e[31;1mWINRUND:\e[0m A socket error occured while waiting for next line of output");
 					writeOutput(outputFileName,cmdID+cmdID+cmdID+cmdID+cmdID);
-					usleep(100*ms);
-					remove(outputFileName.c_str());
 					remove((path+std::to_string(p)+".lock").c_str());
 					return;
 
 				}
 				else if(timeoutRes==0)
 				{
-					writeOutput(outputFileName,std::to_string(ULLONG_MAX)+"-(winrund) A timeout error occured while waiting for next line of output");
-					usleep(100*ms);
+					writeOutput(outputFileName,std::to_string(ULLONG_MAX)+"-\e[31;1mWINRUND:\e[0m A timeout error occured while waiting for next line of output");
 					writeOutput(outputFileName,cmdID+cmdID+cmdID+cmdID+cmdID);
-					usleep(100*ms);
-					remove((outputFileName).c_str());
 					remove((path+std::to_string(p)+".lock").c_str());
 					return;
 				}
