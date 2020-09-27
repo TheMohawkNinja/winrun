@@ -28,12 +28,14 @@ std::string getOutputFile(std::string filepath, const char *filename)
 int main(int argc, char** argv)
 {
 	int ms=1000;
+	int timeout=5;
 	int lineNum,dashIndex;
 	pid_t pid=getpid();
 	std::string path="/dev/shm/winrund/";
 	std::string outputpath=(path+"_"+std::to_string(pid)).c_str();
 	std::string line;
 	std::string lastLine;
+	std::string command;
 	std::ifstream readstream;
 	std::ofstream writestream;
 
@@ -45,6 +47,18 @@ int main(int argc, char** argv)
 	}
 	else
 	{
+		for(int i=1; i<argc; i++)
+		{
+			try
+			{
+				timeout=std::stoull(argv[i]);
+			}
+			catch(...)
+			{
+				command=argv[i];
+			}
+		}
+
 		//Attempt to open "out" file and wait 1ms if it cannot be opened
 		while(!writestream.is_open())
 		{
@@ -58,7 +72,8 @@ int main(int argc, char** argv)
 		}
 
 		writestream<<pid<<std::endl;
-		writestream<<argv[1]<<std::endl;
+		writestream<<command<<std::endl;
+		writestream<<timeout<<std::endl;
 		writestream.close();
 		remove((path+"out.lock").c_str());
 

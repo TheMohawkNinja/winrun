@@ -66,7 +66,7 @@ bool dexists(const char *directory)
 		return false;
 	}
 }
-int waitForTimeout(std::string id, int s, int secs, std::string action)
+int waitForTimeout(std::string id, int s, unsigned long long int secs, std::string action)
 {
 	int rv;
 	fd_set readfds, masterfds;
@@ -86,7 +86,7 @@ int waitForTimeout(std::string id, int s, int secs, std::string action)
 	}
 	else if(rv==0)
 	{
-		syslog(LOG_ERR,"Timeout (>%ld.%06ld seconds) while waiting for %s for PID %s",timeout.tv_sec,timeout.tv_usec,action.c_str(),id.c_str());
+		syslog(LOG_ERR,"Timeout (>%d seconds) while waiting for %s for PID %s",secs,action.c_str(),id.c_str());
 	}
 
 	return rv;
@@ -151,7 +151,7 @@ void writeOutput(std::string filepath, std::string output)
 		}
 	}
 }
-void sendData(std::string cmdID, std::string commandstr, std::string bCode, int s, int p)
+void sendData(std::string cmdID, std::string commandstr, std::string bCode, int s, int p, unsigned long long int t)
 {
 	int sendRes, bytesReceived, timeoutRes;
 	char dataBuffer[bufsize];
@@ -177,7 +177,7 @@ void sendData(std::string cmdID, std::string commandstr, std::string bCode, int 
 			{
 				memset(dataBuffer,0,bufsize);
 
-				timeoutRes=waitForTimeout(cmdID,s,5,"continue signal");
+				timeoutRes=waitForTimeout(cmdID,s,t,"continue signal");
 
 				if(timeoutRes==SO_ERROR)
 				{
@@ -189,7 +189,7 @@ void sendData(std::string cmdID, std::string commandstr, std::string bCode, int 
 				}
 				else if(timeoutRes==0)
 				{
-					writeOutput(outputFileName,std::to_string(ULLONG_MAX)+"-\e[31;1mWINRUND:\e[0m A timeout error occured while waiting for next line of output");
+				writeOutput(outputFileName,std::to_string(ULLONG_MAX)+"-\e[31;1mWINRUND:\e[0m A timeout error occured (>"+std::to_string(t)+" seconds) while waiting for next line of output");
 					writeOutput(outputFileName,cmdID+cmdID+cmdID+cmdID+cmdID);
 					remove((path+std::to_string(p)+".lock").c_str());
 					return;
@@ -322,8 +322,10 @@ int winrund_child(std::string IP,int port)
 	int sock=socket(AF_INET,SOCK_STREAM,0);
 	int connectRes=INT16_MAX;
 	int id;
+	unsigned long long int child_timeout;
 	char buf[bufsize];
 	std::string child_idstr;
+	std::string child_timeoutstr;
 	std::string child_outpath=(path+std::to_string(port)+".out");
 	std::string command;
 	std::ifstream readstream;
@@ -392,6 +394,8 @@ int winrund_child(std::string IP,int port)
 					getline(readstream,child_idstr);
 					id=stoi(child_idstr);
 					getline(readstream,command);
+					getline(readstream,child_timeoutstr);
+					child_timeout=stoull(child_timeoutstr);
 				}
 				catch(...)
 				{
@@ -408,7 +412,7 @@ int winrund_child(std::string IP,int port)
 
 				writestream.open((path+std::to_string(port)+".lock").c_str());
 				writestream.close();
-				sendData(std::to_string(id),("\""+command+"\""),breakCode,sock,port);
+				sendData(std::to_string(id),("\""+command+"\""),breakCode,sock,port,child_timeout);
 				remove((path+std::to_string(port)+".lock").c_str());
 
 				syslog(LOG_INFO,"\"%s\" has completed for PID %d",command.c_str(),id);
@@ -423,6 +427,7 @@ int main(void)
 	pid_t pid, sid;
 	int ctr, maxThreads, basePort;
 	int* id;
+	unsigned long long int* timeout;
 	char dataBuffer[bufsize];
 	std::string user=getlogin();
 	std::string ip="";
@@ -431,6 +436,7 @@ int main(void)
 	std::string idstr;
 	std::string recvStr;
 	std::string line;
+	std::string timeoutstr;
 	std::string* writeBuffer;
 	std::string* command;
 	std::ifstream configReader;
@@ -512,6 +518,7 @@ int main(void)
 					maxThreads=stoi(line.substr(line.find("=")+1,line.length()-line.find("=")));
 
 					id=new int[maxThreads];
+					timeout=new unsigned long long int[maxThreads];
 					writeBuffer=new std::string[maxThreads];
 					command=new std::string[maxThreads];
 				}
@@ -578,6 +585,8 @@ int main(void)
 				getline(outReader,idstr);
 				id[ctr]=stoi(idstr);
 				getline(outReader,command[ctr]);
+				getline(outReader,timeoutstr);
+				timeout[ctr]=stoull(timeoutstr);
 				ctr++;
 			}
 			catch(...)
@@ -623,12 +632,13 @@ int main(void)
 						outReader.close();
 						remove((path+std::to_string(j)+"_").c_str());
 
-						if(recvStr=="0")
+						if(recvStr=="0")//If thread is idle
 						{
 							syslog(LOG_INFO,"Delegating command \"%s\" to thread on port %d",command[i].c_str(),(basePort+j));
 							outWriter.open(path+std::to_string(basePort+j)+".out");
 							outWriter<<id[i]<<std::endl;
 							outWriter<<command[i]<<std::endl;
+							outWriter<<timeout[i]<<std::endl;
 							outWriter.close();
 							break;
 						}
@@ -646,6 +656,7 @@ int main(void)
 		{
 			id[i]=0;
 			command[i]="";
+			timeout[i]=0;
 		}
 
 		usleep(100*ms);
