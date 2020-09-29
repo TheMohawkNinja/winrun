@@ -5,10 +5,12 @@ DEPENDENCIES
 	Requires installation of winrun_svr on the Windows machine which must be running when you want to run a command (so best to have it run on startup/login).
 
 SYNTAX
-	winrun [command] [timeout]
+	winrun [command] [-t [timeout]] [-v]
 
 	command: The command you want to run. make sure to wrap this in quotation marks if it contains spaces.
-	timeout: The number of seconds you want winrund to wait to recieve the next line of output before throwing a timeout error (default is 5 seconds)
+	-t: Specify timeout
+		timeout: The number of seconds you want winrund to wait to recieve the next line of output before throwing a timeout error (default is 5 seconds)
+	-v: Verbose mode
 
 INSTALLATION
 
@@ -25,5 +27,3 @@ KNOWN ISSUES
 	Some "non-standard" characters (i.e. the vertical and horizontal lines in the "tree" command) don't output properly and can cause a crash.
 
 	Output that changes within a given line will likely not output in the Linux terminal.
-
-	Not super reliable...
