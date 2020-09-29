@@ -11,6 +11,7 @@
 #include <fstream>
 #include <time.h>
 #include <filesystem>
+#include <climits>
 
 std::string getOutputFile(std::string filepath, const char *filename)
 {
@@ -27,6 +28,7 @@ std::string getOutputFile(std::string filepath, const char *filename)
 }
 int main(int argc, char** argv)
 {
+	bool verbose=false;
 	int ms=1000;
 	int timeout=5;
 	int lineNum,dashIndex;
@@ -49,11 +51,38 @@ int main(int argc, char** argv)
 	{
 		for(int i=1; i<argc; i++)
 		{
-			try
+			if(!argv[2])
 			{
-				timeout=std::stoull(argv[i]);
+				command=argv[1];
+				break;
 			}
-			catch(...)
+
+			if(std::string(argv[i])=="-t")
+			{
+				try
+				{
+					if(argv[i+1])
+					{
+						timeout=std::stoull(argv[i+1]);
+						i++;
+					}
+					else
+					{
+						fprintf(stderr,"No timeout value entered\n");
+						return -2;
+					}
+				}
+				catch(...)
+				{
+					fprintf(stderr,"Invalid timeout value \"%s\". Must be between 0 and %d\n",argv[i],ULLONG_MAX);
+					return -3;
+				}
+			}
+			else if(std::string(argv[i])=="-v")
+			{
+				verbose=true;
+			}
+			else
 			{
 				command=argv[i];
 			}
@@ -73,7 +102,14 @@ int main(int argc, char** argv)
 
 		writestream<<pid<<std::endl;
 		writestream<<command<<std::endl;
-		writestream<<timeout<<std::endl;
+		if(!verbose)
+		{
+			writestream<<timeout<<std::endl;
+		}
+		else
+		{
+			writestream<<timeout<<",verbose"<<std::endl;
+		}
 		writestream.close();
 		remove((path+"out.lock").c_str());
 
@@ -107,7 +143,10 @@ int main(int argc, char** argv)
 
 					lineNum=stoi(line.substr(0,line.find("-")));
 
-					lastLine=line;
+					if(stoull(line.substr(0,dashIndex))<ULLONG_MAX)
+					{
+						lastLine=line;
+					}
 				}
 				catch(...)
 				{
