@@ -31,12 +31,10 @@ int main(int argc, char** argv)
 	bool verbose=false;
 	int ms=1000;
 	int timeout=5;
-	int lineNum,dashIndex;
 	pid_t pid=getpid();
 	std::string path="/dev/shm/winrund/";
 	std::string outputpath=(path+"_"+std::to_string(pid)).c_str();
 	std::string line;
-	std::string lastLine;
 	std::string command;
 	std::ifstream readstream;
 	std::ofstream writestream;
@@ -109,6 +107,7 @@ int main(int argc, char** argv)
 		else
 		{
 			writestream<<timeout<<",verbose"<<std::endl;
+			fprintf(stdout,"Verbose output color codes: \e[31;1mError\e[00m, \e[33;1mWarning\e[00m, \e[36;1mInfo\e[00m, \e[32;1mNotice\e[00m\n\n");
 		}
 		writestream.close();
 		remove((path+"out.lock").c_str());
@@ -127,35 +126,9 @@ int main(int argc, char** argv)
 
 			readstream.open(outputpath);
 			std::getline(readstream,line);
-			if(line!=lastLine&&line!=(std::to_string(pid)+std::to_string(pid)+std::to_string(pid)+std::to_string(pid)+std::to_string(pid)))
+			if(line!=(std::to_string(pid)+std::to_string(pid)+std::to_string(pid)+std::to_string(pid)+std::to_string(pid)))
 			{
-				dashIndex=line.find("-");
-				try
-				{
-					//Test if it is a valid line number before outputting
-					stoull(line.substr(0,dashIndex));
-
-					//std::cout<<"(Line "+line.substr(0,dashIndex)+"): "+line.substr((dashIndex+1),(line.length()-(line.substr(0,dashIndex+1).length())))<<std::endl;
-					fprintf(stdout,"%s\n",line.substr((dashIndex+1),(line.length()-(line.substr(0,dashIndex+1).length()))).c_str());
-
-					readstream.close();
-					remove(outputpath.c_str());
-
-					lineNum=stoi(line.substr(0,line.find("-")));
-
-					if(stoull(line.substr(0,dashIndex))<ULLONG_MAX)
-					{
-						lastLine=line;
-					}
-				}
-				catch(...)
-				{
-					readstream.close();
-					remove(outputpath.c_str());
-				}
-			}
-			else if(line==lastLine)
-			{
+				fprintf(stdout,"%s\n",line.c_str());
 				readstream.close();
 				remove(outputpath.c_str());
 			}
@@ -165,7 +138,6 @@ int main(int argc, char** argv)
 				return 0;
 			}
 		}
-	
 	}
 	return 0;
 }
