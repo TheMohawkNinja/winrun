@@ -12,7 +12,33 @@
 #include <time.h>
 #include <filesystem>
 #include <climits>
+#include <signal.h>
 
+const char* getProcName(int procID)
+{
+	char* name = (char*)calloc(1024,sizeof(char));
+	if(name)
+	{
+		sprintf(name, "/proc/%d/cmdline",procID);
+		FILE* f = fopen(name,"r");
+
+		if(f)
+		{
+			size_t size;
+			size = fread(name, sizeof(char), 1024, f);
+
+			if(size>0)
+			{
+				if(name[size-1]=='\n')
+				{
+					name[size-1]='\0';
+				}
+				fclose(f);
+			}
+		}
+	}
+	return name;
+}
 std::string getOutputFile(std::string filepath, const char *filename)
 {
 	std::string entry8;
@@ -31,6 +57,7 @@ int main(int argc, char** argv)
 	bool verbose=false;
 	int ms=1000;
 	int timeout=5;
+	int dpid;
 	pid_t pid=getpid();
 	std::string path="/dev/shm/winrund/";
 	std::string outputpath=(path+"_"+std::to_string(pid)).c_str();
@@ -38,6 +65,25 @@ int main(int argc, char** argv)
 	std::string command;
 	std::ifstream readstream;
 	std::ofstream writestream;
+
+	//Check if daemon is running before continuing
+	try
+	{
+		readstream.open((path+"pid").c_str());
+		getline(readstream,line);
+		dpid=stoi(line);
+
+		if(!kill(dpid,0)==0||(kill(dpid,0)==0&&std::string(getProcName(dpid)).find("winrund")))
+		{
+			fprintf(stderr,"winrund not running\n");
+			return -4;
+		}
+	}
+	catch(...)
+	{
+		fprintf(stderr,"winrund not running\n");
+		return -4;
+	}
 
 	//If user just types in "winrun"
 	if(!argv[1])

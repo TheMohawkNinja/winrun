@@ -1,4 +1,4 @@
-//g++ winrund.cpp -o winrund -pthread
+//g++ winrund.cpp -o winrund -pthread -lstdc++fs -std=c++17
 
 #include <iostream>
 #include <stdio.h>
@@ -489,6 +489,7 @@ int main(void)
 	//The parent process continues with a process ID greater than 0
 	if(pid > 0)
 	{
+		writeOutput((path+"pid").c_str(),std::to_string(pid));
 		exit(EXIT_SUCCESS);
 	}
 	//A process ID lower than 0 indicates a failure in either process
