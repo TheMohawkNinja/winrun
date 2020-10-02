@@ -489,7 +489,7 @@ int main(void)
 	//The parent process continues with a process ID greater than 0
 	if(pid > 0)
 	{
-		writeOutput((path+"pid").c_str(),std::to_string(pid));
+		//writeOutput((path+"pid").c_str(),std::to_string(pid));
 		exit(EXIT_SUCCESS);
 	}
 	//A process ID lower than 0 indicates a failure in either process
@@ -584,13 +584,15 @@ int main(void)
 	configReader.close();
 
 	//Clean up /dev/shm/winrund in the event that winrund has been restarted
-	std::string entry8;
-	for (const auto & entry : std::filesystem::directory_iterator("/dev/shm/winrund"))
+	if(dexists("/dev/shm/winrund"))
 	{
-		entry8=entry.path().u8string();
-		remove(entry8.c_str());
+		std::string entry8;
+		for (const auto & entry : std::filesystem::directory_iterator("/dev/shm/winrund"))
+		{
+			entry8=entry.path().u8string();
+			remove(entry8.c_str());
+		}
 	}
-
 
 	//Initialize ingoing and outgoing files, along with containing directory
 	if(!dexists(path.c_str()))
