@@ -1,10 +1,9 @@
 //g++ winrun.cpp -o winrun -lstdc++fs -std=c++17
 
-#include <iostream>
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <string.h>
-#include <cstdlib>
 #include <stdlib.h>
 #include <stdio.h>
 #include <fcntl.h>
@@ -14,30 +13,17 @@
 #include <climits>
 #include <signal.h>
 
-const char* getProcName(int procID)
+bool dexists(const char *directory)
 {
-	char* name = (char*)calloc(1024,sizeof(char));
-	if(name)
+	struct stat st;
+	if(stat(directory,&st) == 0)
 	{
-		sprintf(name, "/proc/%d/cmdline",procID);
-		FILE* f = fopen(name,"r");
-
-		if(f)
-		{
-			size_t size;
-			size = fread(name, sizeof(char), 1024, f);
-
-			if(size>0)
-			{
-				if(name[size-1]=='\n')
-				{
-					name[size-1]='\0';
-				}
-				fclose(f);
-			}
-		}
+		return true;
 	}
-	return name;
+	else
+	{
+		return false;
+	}
 }
 std::string getOutputFile(std::string filepath, const char *filename)
 {
@@ -57,7 +43,6 @@ int main(int argc, char** argv)
 	bool verbose=false;
 	int ms=1000;
 	int timeout=5;
-	int dpid;
 	pid_t pid=getpid();
 	std::string path="/dev/shm/winrund/";
 	std::string outputpath=(path+"_"+std::to_string(pid)).c_str();
@@ -67,21 +52,23 @@ int main(int argc, char** argv)
 	std::ofstream writestream;
 
 	//Check if daemon is running before continuing
-	try
+	if(dexists(path.c_str()))	
 	{
-		readstream.open((path+"pid").c_str());
+		system(("systemctl status winrund | grep 'Active:' > "+path+"status").c_str());
+		readstream.open((path+"status").c_str());
 		getline(readstream,line);
-		dpid=stoi(line);
+		readstream.close();
+		remove((path+"status").c_str());
 
-		if(!kill(dpid,0)==0||(kill(dpid,0)==0&&std::string(getProcName(dpid)).find("winrund")))
+		if(line.find("active (running)")==std::string::npos)
 		{
-			fprintf(stderr,"winrund not running\n");
+			fprintf(stderr,"winrund not active\n");
 			return -4;
 		}
 	}
-	catch(...)
+	else
 	{
-		fprintf(stderr,"winrund not running\n");
+		fprintf(stderr,"%s doesn't exist\n",path.c_str());
 		return -4;
 	}
 
@@ -172,6 +159,7 @@ int main(int argc, char** argv)
 
 			readstream.open(outputpath);
 			std::getline(readstream,line);
+
 			if(line!=(std::to_string(pid)+std::to_string(pid)+std::to_string(pid)+std::to_string(pid)+std::to_string(pid)))
 			{
 				fprintf(stdout,"%s\n",line.c_str());
@@ -180,6 +168,7 @@ int main(int argc, char** argv)
 			}
 			else
 			{
+				readstream.close();
 				remove(outputpath.c_str());
 				return 0;
 			}

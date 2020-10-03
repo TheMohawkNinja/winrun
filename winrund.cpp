@@ -1,11 +1,9 @@
 //g++ winrund.cpp -o winrund -pthread -lstdc++fs -std=c++17
 
-#include <iostream>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
 #include <unistd.h>
-#include <string>
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -24,7 +22,6 @@ const int bufsize=4096;
 const int ms=1000;
 std::string path="/dev/shm/winrund/";
 
-//For security purposes, we don't allow any arguments to be passed into the daemon
 const char* getProcName(int procID)
 {
 	char* name = (char*)calloc(1024,sizeof(char));
@@ -193,7 +190,6 @@ void sendData(std::string cmdID, std::string commandstr, std::string bCode, int 
 	std::string outputFileName=(path+"_"+cmdID);
 
 	//Send command
-	syslog(LOG_INFO,"SendData");
         sendRes=send(s,(bCode+cmdID+commandstr).c_str(),((bCode+cmdID+commandstr).length()+1),0);
 
         if(sendRes==-1)
@@ -206,7 +202,7 @@ void sendData(std::string cmdID, std::string commandstr, std::string bCode, int 
 	while(true)
 	{	        
 		//If the relavent instance of winrun is still running
-		if(kill(stoi(cmdID),0)==0&&std::string(getProcName(stoi(cmdID))).find(("winrun"+commandstr).c_str()))
+		if(kill(stoi(cmdID),0)==0&&std::string(getProcName(stoi(cmdID))).find("winrun"))
 		{
 			memset(dataBuffer,0,bufsize);
 
@@ -468,15 +464,14 @@ int main(void)
 	int ctr, maxThreads, basePort;
 	int* id;
 	unsigned long long int* timeout;
-	char dataBuffer[bufsize];
-	std::string user=getlogin();
+	char dataBuffer[bufsize]="";
 	std::string ip="";
-	std::string configpath="/home/"+user+"/.config/winrund/config";
+	std::string configpath="/etc/winrund/config";
 	std::string outpath=path+"out";
-	std::string idstr;
-	std::string recvStr;
-	std::string line;
-	std::string timeoutstr;
+	std::string idstr="";
+	std::string recvStr="";
+	std::string line="";
+	std::string timeoutstr="";
 	std::string* writeBuffer;
 	std::string* command;
 	std::ifstream configReader;
@@ -489,7 +484,6 @@ int main(void)
 	//The parent process continues with a process ID greater than 0
 	if(pid > 0)
 	{
-		//writeOutput((path+"pid").c_str(),std::to_string(pid));
 		exit(EXIT_SUCCESS);
 	}
 	//A process ID lower than 0 indicates a failure in either process
@@ -597,12 +591,23 @@ int main(void)
 	//Initialize ingoing and outgoing files, along with containing directory
 	if(!dexists(path.c_str()))
 	{
-		mkdir(path.c_str(),S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+		mkdir(path.c_str(),S_IRWXU | S_IRWXG | S_IRWXO);
 	}
 	if(!fexists(outpath.c_str()))
 	{
 		outWriter.open(outpath);
 		outWriter.close();
+	}
+
+	//Initialize pid file
+	if(!fexists((path+"pid").c_str()))
+	{
+		writeOutput((path+"pid").c_str(),std::to_string(getpid()));
+	}
+	else
+	{
+		remove((path+"pid").c_str());
+		writeOutput((path+"pid").c_str(),std::to_string(getpid()));
 	}
 
 	//Spawn child threads
