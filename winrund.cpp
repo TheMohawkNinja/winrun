@@ -79,15 +79,22 @@ void writeOutput(std::string cmdID, std::string filepath, std::string output, in
 			usleep(ms);
 		}
 	
-		if(!fexists(filepath.c_str()))
+		if(kill(stoi(cmdID),0)==0&&std::string(getProcName(stoi(cmdID))).find("winrun"))
 		{
-			outstream.open((filepath+".lock").c_str());
-			outstream.close();
-			outstream.open(filepath);
-			outstream<<output<<std::endl;
-			outstream.close();
-			remove((filepath+".lock").c_str());
-			break;
+			if(!fexists(filepath.c_str()))
+			{
+				outstream.open((filepath+".lock").c_str());
+				outstream.close();
+				outstream.open(filepath);
+				outstream<<output<<std::endl;
+				outstream.close();
+				remove((filepath+".lock").c_str());
+				break;
+			}
+		}
+		else
+		{
+			return;
 		}
 	}
 
@@ -190,13 +197,15 @@ void sendData(std::string cmdID, std::string commandstr, std::string bCode, int 
 	std::string outputFileName=(path+"_"+cmdID);
 
 	//Send command
-        sendRes=send(s,(bCode+cmdID+commandstr).c_str(),((bCode+cmdID+commandstr).length()+1),0);
-
-        if(sendRes==-1)
-        {
-              	syslog(LOG_ERR,"Could not send data to server! Sleeping for 100ms...");
-                usleep(100*ms);
-        }
+	do
+	{
+        	sendRes=send(s,(bCode+cmdID+commandstr).c_str(),((bCode+cmdID+commandstr).length()+1),0);
+              	if(sendRes==-1)
+		{
+			writeLog(v,LOG_WARNING,cmdID,"Could not send command to server! Sleeping for 100ms...");
+                	usleep(100*ms);
+		}
+        }while(sendRes==-1);
 
 	//Wait for response and exit program when break code is recieved.
 	while(true)
