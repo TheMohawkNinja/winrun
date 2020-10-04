@@ -105,7 +105,7 @@ int main(int argc, char** argv)
 				}
 				catch(...)
 				{
-					fprintf(stderr,"Invalid timeout value \"%s\". Must be between 0 and %d\n",argv[i],ULLONG_MAX);
+					fprintf(stderr,"Invalid timeout value \"%s\". Must be between 0 and %llu\n",argv[i],ULLONG_MAX);
 					return -3;
 				}
 			}
