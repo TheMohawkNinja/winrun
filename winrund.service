@@ -1,0 +1,13 @@
+[Unit]
+Description=Daemon for the winrun program
+
+[Service]
+Type=forking
+Wants=network-online.target
+After=network-online.target
+Requires=network-online.target
+ExecStartPre=/bin/sh -c 'until ping -c1 google.com; do sleep 1; done;'
+ExecStart=/usr/local/bin/winrund
+
+[Install]
+WantedBy=multi-user.target
