@@ -15,6 +15,7 @@ SYNTAX
 INSTALLATION
 
 	g++ compile lines are located at the first line of "winrun.cpp" and "winrund.cpp". Once compiled, copy the executables to /usr/bin
+	Copy "winrund.service" to /etc/systemd/system and run "systemctl enable winrund" and if you want to start before reboot, then also run "systemctl start winrund"
 
 CONFIGURATION
 
