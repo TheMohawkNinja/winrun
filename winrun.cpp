@@ -38,31 +38,6 @@ std::string getOutputFile(std::string filepath, const char *filename)
 	}
 	return "";
 }
-const char* getProcName(int procID)
-{
-	char* name = (char*)calloc(1024,sizeof(char));
-	if(name)
-	{
-		sprintf(name, "/proc/%d/cmdline",procID);
-		FILE* f = fopen(name,"r");
-
-		if(f)
-		{
-			size_t size;
-			size = fread(name, sizeof(char), 1024, f);
-
-			if(size>0)
-			{
-				if(name[size-1]=='\n')
-				{
-					name[size-1]='\0';
-				}
-				fclose(f);
-			}
-		}
-	}
-	return name;
-}
 int main(int argc, char** argv)
 {
 	bool verbose=false;
@@ -79,11 +54,13 @@ int main(int argc, char** argv)
 	//Check if daemon is running before continuing
 	if(dexists(path.c_str()))	
 	{
-		readstream.open((path+"pid").c_str());
+		system(("systemctl status winrund | grep 'Active:' > "+path+"status").c_str());
+		readstream.open((path+"status").c_str());
 		getline(readstream,line);
 		readstream.close();
+		remove((path+"status").c_str());
 
-		if(kill(stoi(line),0)!=0||!std::string(getProcName(stoi(line))).find("winrund"))
+		if(line.find("active (running)")==std::string::npos)
 		{
 			fprintf(stderr,"winrund not active\n");
 			return -4;
@@ -169,7 +146,7 @@ int main(int argc, char** argv)
 		remove((path+"out.lock").c_str());
 
 		//Attempt to open response file and dump contents to stdout
-		while(!readstream.is_open())
+		while(true)
 		{
 			while(getOutputFile(path,std::to_string(pid).c_str())=="")
 			{

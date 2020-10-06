@@ -79,7 +79,7 @@ void writeOutput(std::string cmdID, std::string filepath, std::string output, in
 			usleep(ms);
 		}
 	
-		if(kill(stoi(cmdID),0)==0&&std::string(getProcName(stoi(cmdID))).find("winrun"))
+		if(kill(stoi(cmdID),0)==0&&std::string(getProcName(stoi(cmdID))).find("winrun")!=std::string::npos)
 		{
 			if(!fexists(filepath.c_str()))
 			{
@@ -211,7 +211,7 @@ void sendData(std::string cmdID, std::string commandstr, std::string bCode, int 
 	while(true)
 	{	        
 		//If the relavent instance of winrun is still running
-		if(kill(stoi(cmdID),0)==0&&std::string(getProcName(stoi(cmdID))).find("winrun"))
+		if(kill(stoi(cmdID),0)==0&&std::string(getProcName(stoi(cmdID))).find("winrun")!=std::string::npos)
 		{
 			memset(dataBuffer,0,bufsize);
 
