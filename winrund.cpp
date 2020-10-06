@@ -618,7 +618,7 @@ int main(void)
 		remove((path+"pid").c_str());
 		writeOutput((path+"pid").c_str(),std::to_string(getpid()));
 	}
-system("ip addr > /home/terminus/ipaddr");
+
 	//Spawn child threads
 	std::thread winrund_check_thread(winrund_check,ip,basePort);
 	winrund_check_thread.detach();
