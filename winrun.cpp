@@ -38,6 +38,31 @@ std::string getOutputFile(std::string filepath, const char *filename)
 	}
 	return "";
 }
+const char* getProcName(int procID)
+{
+	char* name = (char*)calloc(1024,sizeof(char));
+	if(name)
+	{
+		sprintf(name, "/proc/%d/cmdline",procID);
+		FILE* f = fopen(name,"r");
+
+		if(f)
+		{
+			size_t size;
+			size = fread(name, sizeof(char), 1024, f);
+
+			if(size>0)
+			{
+				if(name[size-1]=='\n')
+				{
+					name[size-1]='\0';
+				}
+				fclose(f);
+			}
+		}
+	}
+	return name;
+}
 int main(int argc, char** argv)
 {
 	bool verbose=false;
@@ -54,13 +79,11 @@ int main(int argc, char** argv)
 	//Check if daemon is running before continuing
 	if(dexists(path.c_str()))	
 	{
-		system(("systemctl status winrund | grep 'Active:' > "+path+"status").c_str());
-		readstream.open((path+"status").c_str());
+		readstream.open((path+"pid").c_str());
 		getline(readstream,line);
 		readstream.close();
-		remove((path+"status").c_str());
 
-		if(line.find("active (running)")==std::string::npos)
+		if(kill(stoi(line),0)!=0||!std::string(getProcName(stoi(line))).find("winrund"))
 		{
 			fprintf(stderr,"winrund not active\n");
 			return -4;
