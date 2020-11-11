@@ -688,49 +688,46 @@ int main(void)
 			{
 				for(int j=1; j<=maxThreads; j++)
 				{
-					//if(!fexists((path+std::to_string(basePort+j)+".lock").c_str()))
-					//{
-						//Check to see if server thread is idle
-						outWriter.open((path+"check.lock").c_str());
-						outWriter.close();
-						outWriter.open((path+"check.out").c_str());
+					//Check to see if server thread is idle
+					outWriter.open((path+"check.lock").c_str());
+					outWriter.close();
+					outWriter.open((path+"check.out").c_str());
+					outWriter<<id[i]<<std::endl;
+					outWriter<<verbose[i]<<std::endl;
+					outWriter<<j;
+					outWriter.close();
+					remove((path+"check.lock").c_str());
+
+					while(!fexists((path+std::to_string(j)+"_").c_str()))
+					{
+						usleep(ms);
+					}
+					while(fexists((path+std::to_string(j)+"_.lock").c_str()))
+					{
+						usleep(ms);
+					}
+
+					outReader.open((path+std::to_string(j)+"_").c_str());
+					getline(outReader,recvStr);
+					outReader.close();
+					remove((path+std::to_string(j)+"_").c_str());
+
+					if(recvStr=="0")//If thread is idle
+					{
+						if(fexists((path+std::to_string(basePort+j)+".lock").c_str()))
+						{
+							remove((path+std::to_string(basePort+j)+".lock").c_str());
+						}
+
+						writeLog(verbose[i],LOG_INFO,std::to_string(id[i]),"Delegating command \"%s\" to thread %d (port %d)",command[i].c_str(),j,(basePort+j));
+						outWriter.open(path+std::to_string(basePort+j)+".out");
 						outWriter<<id[i]<<std::endl;
+						outWriter<<command[i]<<std::endl;
+						outWriter<<timeout[i]<<std::endl;
 						outWriter<<verbose[i]<<std::endl;
-						outWriter<<j;
 						outWriter.close();
-						remove((path+"check.lock").c_str());
-
-						while(!fexists((path+std::to_string(j)+"_").c_str()))
-						{
-							usleep(ms);
-						}
-						while(fexists((path+std::to_string(j)+"_.lock").c_str()))
-						{
-							usleep(ms);
-						}
-
-						outReader.open((path+std::to_string(j)+"_").c_str());
-						getline(outReader,recvStr);
-						outReader.close();
-						remove((path+std::to_string(j)+"_").c_str());
-
-						if(recvStr=="0")//If thread is idle
-						{
-							if(fexists((path+std::to_string(basePort+j)+".lock").c_str()))
-							{
-								remove((path+std::to_string(basePort+j)+".lock").c_str());
-							}
-
-							writeLog(verbose[i],LOG_INFO,std::to_string(id[i]),"Delegating command \"%s\" to thread %d (port %d)",command[i].c_str(),j,(basePort+j));
-							outWriter.open(path+std::to_string(basePort+j)+".out");
-							outWriter<<id[i]<<std::endl;
-							outWriter<<command[i]<<std::endl;
-							outWriter<<timeout[i]<<std::endl;
-							outWriter<<verbose[i]<<std::endl;
-							outWriter.close();
-							break;
-						}
-					//}
+						break;
+					}
 					if(j==8)
 					{
 						j=0;
