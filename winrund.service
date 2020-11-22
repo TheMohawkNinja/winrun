@@ -1,7 +1,12 @@
 [Unit]
 Description=Daemon for the winrun program
 
+StartLimitIntervalSecs=500
+StartLimitBurst=5
+
 [Service]
+Restart=on-failure
+RestartSec=5s
 Type=forking
 Wants=network-online.target
 After=network-online.target
