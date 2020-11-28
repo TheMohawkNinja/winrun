@@ -1,4 +1,4 @@
-//g++ winrund.cpp -o winrund -pthread -lstdc++fs -std=c++17
+//g++ winrund.cpp -fno-inline -o winrund -pthread -lstdc++fs -std=c++17
 
 #include <stdio.h>
 #include <stdlib.h>
