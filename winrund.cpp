@@ -22,9 +22,11 @@ const int bufsize=4096;
 const int ms=1000;
 std::string path="/dev/shm/winrund/";
 
-const char* getProcName(int procID)
+std::string getProcName(int procID)
 {
 	char* name = (char*)calloc(1024,sizeof(char));
+	std::string returnName;
+
 	if(name)
 	{
 		sprintf(name, "/proc/%d/cmdline",procID);
@@ -45,7 +47,9 @@ const char* getProcName(int procID)
 			}
 		}
 	}
-	return name;
+	returnName=std::string(name);
+	free(name);
+	return returnName;
 }
 bool fexists(const char *filename)
 {
