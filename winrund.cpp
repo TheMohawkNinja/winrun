@@ -68,31 +68,55 @@ bool dexists(const char *directory)
 		return false;
 	}
 }
+void safeFile_checkLock(std::string p,bool f)
+{
+	if(f)
+	{
+		while(fexists(p.c_str()))
+		{
+			usleep(ms);
+		}
+	}
+	else
+	{
+		while(!fexists(p.c_str()))
+		{
+			usleep(ms);
+		}
+	}
+	while(fexists((p+".lock").c_str()))
+	{
+		usleep(ms);
+	}
+}
+void safeFile_createLock(std::string p)
+{
+	std::ofstream w;
+
+	w.open((p+".lock").c_str());
+	w.close();
+}
+void safeFile_removeLock(std::string p)
+{
+	remove((p+".lock").c_str());
+}
 void writeOutput(std::string cmdID, std::string filepath, std::string output, int s)
 {
 	std::ofstream outstream;
 
 	while(true)
 	{
-		while(fexists((filepath).c_str()))
-		{
-			usleep(ms);
-		}
-		while(fexists((filepath+".lock").c_str()))
-		{
-			usleep(ms);
-		}
-	
+		safeFile_checkLock(filepath,true);
+
 		if(kill(stoi(cmdID),0)==0&&std::string(getProcName(stoi(cmdID))).find("winrun")!=std::string::npos)
 		{
 			if(!fexists(filepath.c_str()))
 			{
-				outstream.open((filepath+".lock").c_str());
-				outstream.close();
+				safeFile_createLock(filepath);
 				outstream.open(filepath);
 				outstream<<output<<std::endl;
 				outstream.close();
-				remove((filepath+".lock").c_str());
+				safeFile_removeLock(filepath);
 				break;
 			}
 		}
@@ -114,23 +138,15 @@ void writeOutput(std::string filepath, std::string output)
 
 	while(!outstream.is_open())
 	{
-		while(fexists((filepath).c_str()))
-		{
-			usleep(ms);
-		}
-		while(fexists((filepath+".lock").c_str()))
-		{
-			usleep(ms);
-		}
-	
+		safeFile_checkLock(filepath,true);
+
 		if(!fexists(filepath.c_str()))
 		{
-			outstream.open((filepath+".lock").c_str());
-			outstream.close();
+			safeFile_createLock(filepath);
 			outstream.open(filepath);
 			outstream<<output<<std::endl;
 			outstream.close();
-			remove((filepath+".lock").c_str());
+			safeFile_removeLock(filepath);
 			break;
 		}
 	}
@@ -147,19 +163,19 @@ void writeLog(bool verbose, int priority, std::string id, const char* format, ..
 
 	if(verbose)
 	{
-		if(priority==LOG_ERR) //Red
+		if(priority==LOG_ERR)		//Red
 		{
 			header="\e[31;1m";
 		}
-		else if(priority==LOG_WARNING) //Yellow
+		else if(priority==LOG_WARNING)	//Yellow
 		{
 			header="\e[33;1m";
 		}
-		else if(priority==LOG_INFO) //Cyan
+		else if(priority==LOG_INFO)	//Cyan
 		{
 			header="\e[36;1m";
 		}
-		else //LOG_NOTICE, Green
+		else				//LOG_NOTICE, Green
 		{
 			header="\e[32;1m";
 		}
@@ -224,13 +240,13 @@ void sendData(std::string cmdID, std::string commandstr, std::string bCode, int 
 			if(timeoutRes==SO_ERROR)
 			{
 				writeOutput(outputFileName,cmdID+cmdID+cmdID+cmdID+cmdID);
-				remove((path+std::to_string(p)+".lock").c_str());
+				safeFile_removeLock(path+std::to_string(p));
 				return;
 			}
 			else if(timeoutRes==0)
 			{
 				writeOutput(outputFileName,cmdID+cmdID+cmdID+cmdID+cmdID);
-				remove((path+std::to_string(p)+".lock").c_str());
+				safeFile_removeLock(path+std::to_string(p));
 				return;
 			}
 			else
@@ -268,7 +284,7 @@ int winrund_check(std::string IP,int port)
 	char buf[bufsize];
 	char dataBuffer[bufsize];
 	std::string check_test_val,check_result_val,check_id,check_verbosestr;
-	std::string check_outpath=(path+"check");
+	std::string check_outpath=(path+"check.out");
 	std::ifstream readstream;
 	std::ofstream writestream;
 
@@ -306,23 +322,17 @@ int winrund_check(std::string IP,int port)
 	{
 		check_test_val="";
 
-		while(!fexists((check_outpath+".out").c_str()))
-		{
-			usleep(10*ms);
-		}
-		while(fexists((check_outpath+".lock").c_str()))
-		{
-			usleep(ms);
-		}
-
 		//Get value thread needs to check
-		readstream.open((check_outpath+".out").c_str());
+		safeFile_checkLock(check_outpath,false);
+		safeFile_createLock(check_outpath);
+		readstream.open((check_outpath).c_str());
 		getline(readstream,check_id);
 		getline(readstream,check_verbosestr);
 		std::istringstream(check_verbosestr)>>std::boolalpha>>check_verbose;
 		getline(readstream,check_test_val);
 		readstream.close();
-		remove((check_outpath+".out").c_str());
+		remove((check_outpath).c_str());
+		safeFile_removeLock(check_outpath);
 
 		//Send value to check, and wait for response
 		send(sock,check_test_val.c_str(),check_test_val.size()+1,0);
@@ -331,8 +341,7 @@ int winrund_check(std::string IP,int port)
 
 		timeoutRes=waitForTimeout(check_id,sock,1,"thread idle/busy signal",check_verbose);
 
-		writestream.open((path+check_test_val+"_.lock").c_str());
-		writestream.close();
+		safeFile_createLock(path+check_test_val+"_");
 		writestream.open((path+check_test_val+"_").c_str());
 
 		if(timeoutRes==SO_ERROR)
@@ -352,7 +361,7 @@ int winrund_check(std::string IP,int port)
 		}
 
 		writestream.close();
-		remove((path+check_test_val+"_.lock").c_str());
+		safeFile_removeLock(path+check_test_val+"_");
 	}
 }
 int winrund_child(std::string IP,int port)
@@ -452,11 +461,10 @@ int winrund_child(std::string IP,int port)
 			{
 				writeLog(child_verbose,LOG_INFO,std::to_string(id),"Sending command \"%s\" for PID %d over port %d",command.c_str(),id,port);
 
-				writestream.open((path+std::to_string(port)+".lock").c_str());
-				writestream.close();
-
+				safeFile_createLock(path+std::to_string(port));
 				sendData(std::to_string(id),("\""+command+"\""),breakCode,sock,port,child_timeout,child_verbose);
-				remove((path+std::to_string(port)+".lock").c_str());
+				safeFile_removeLock(path+std::to_string(port));
+
 				syslog(LOG_INFO,"\"%s\" has completed for PID %d",command.c_str(),id);
 			}
 		}
@@ -591,10 +599,10 @@ int main(void)
 	configReader.close();
 
 	//Clean up /dev/shm/winrund in the event that winrund has been restarted
-	if(dexists("/dev/shm/winrund"))
+	if(dexists(path.c_str()))
 	{
 		std::string entry8;
-		for (const auto & entry : std::filesystem::directory_iterator("/dev/shm/winrund"))
+		for (const auto & entry : std::filesystem::directory_iterator(path))
 		{
 			entry8=entry.path().u8string();
 			remove(entry8.c_str());
@@ -642,16 +650,13 @@ int main(void)
 		{
 			usleep(100*ms);
 
-			while(fexists((outpath+".lock").c_str()))
-			{
-				usleep(ms);
-			}
-
-			outWriter.open((outpath+".lock").c_str());
-			outWriter.close();
+			safeFile_checkLock(outpath,false);
+			safeFile_createLock(outpath);
 			outReader.open(outpath);
 			break;
 		}
+
+		syslog(LOG_INFO,"Reading commands");
 
 		//Read in requested commands
 		while(!outReader.eof())
@@ -680,8 +685,9 @@ int main(void)
 		}
 		outReader.close();
 		remove(outpath.c_str());
-		remove((outpath+".lock").c_str());
+		safeFile_removeLock(outpath);
 
+		//Create blank "out" file
 		outWriter.open(outpath);
 		outWriter.close();
 
@@ -693,34 +699,28 @@ int main(void)
 				for(int j=1; j<=maxThreads; j++)
 				{
 					//Check to see if server thread is idle
-					outWriter.open((path+"check.lock").c_str());
-					outWriter.close();
+					safeFile_checkLock(path+"check.out",true);
+					safeFile_createLock(path+"check.out");
 					outWriter.open((path+"check.out").c_str());
 					outWriter<<id[i]<<std::endl;
 					outWriter<<verbose[i]<<std::endl;
 					outWriter<<j;
 					outWriter.close();
-					remove((path+"check.lock").c_str());
+					safeFile_removeLock(path+"check.out");
 
-					while(!fexists((path+std::to_string(j)+"_").c_str()))
-					{
-						usleep(ms);
-					}
-					while(fexists((path+std::to_string(j)+"_.lock").c_str()))
-					{
-						usleep(ms);
-					}
-
+					safeFile_checkLock(path+std::to_string(j)+"_",false);
+					safeFile_createLock(path+std::to_string(j)+"_");
 					outReader.open((path+std::to_string(j)+"_").c_str());
 					getline(outReader,recvStr);
 					outReader.close();
 					remove((path+std::to_string(j)+"_").c_str());
+					safeFile_removeLock(path+std::to_string(j)+"_");
 
 					if(recvStr=="0")//If thread is idle
 					{
 						if(fexists((path+std::to_string(basePort+j)+".lock").c_str()))
 						{
-							remove((path+std::to_string(basePort+j)+".lock").c_str());
+							safeFile_removeLock(path+std::to_string(basePort+j)+".lock");
 						}
 
 						writeLog(verbose[i],LOG_INFO,std::to_string(id[i]),"Delegating command \"%s\" to thread %d (port %d)",command[i].c_str(),j,(basePort+j));
